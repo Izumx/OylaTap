@@ -7,7 +7,12 @@ try {
   await client.query(
     'CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz DEFAULT now())',
   );
-  for (const name of ['001_initial', '002_retelling_consent', '003_season_visibility']) {
+  for (const name of [
+    '001_initial',
+    '002_retelling_consent',
+    '003_season_visibility',
+    '004_daily_learning',
+  ]) {
     if (
       !(await client.query('SELECT name FROM schema_migrations WHERE name=$1', [name])).rowCount
     ) {

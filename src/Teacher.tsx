@@ -93,7 +93,13 @@ export function StudioPage() {
   );
 }
 type DraftEpisode = { id?: string; title: string; script: string; has_video?: boolean };
-type DraftQuestion = { prompt: string; options: string[]; correct: number; explanation: string };
+type DraftQuestion = {
+  episode_position?: number;
+  prompt: string;
+  options: string[];
+  correct: number;
+  explanation: string;
+};
 type Draft = {
   title: string;
   description: string;
@@ -148,6 +154,7 @@ export function EditorPage() {
         episodes: s.episodes || [],
         questions: (s.questions || []).map((q) => ({
           ...q,
+          episode_position: q.episode_position ?? 0,
           correct: q.correct ?? 0,
           explanation: q.explanation || '',
         })),
@@ -546,7 +553,7 @@ export function EditorPage() {
                 <h2>{t('Вопросы на понимание', 'Түсінуге арналған сұрақтар')}</h2>
                 <p className="muted">
                   {t(
-                    'Добавьте ответы и объяснение. Публикация требует хотя бы один вопрос.',
+                    'Добавьте микровопрос к каждой серии и объяснение ответа.',
                     'Жауаптар мен түсіндірме қосыңыз. Кемінде бір сұрақ қажет.',
                   )}
                 </p>
@@ -628,6 +635,27 @@ export function EditorPage() {
                       </label>
                     ))}
                   </div>
+                  <label>
+                    {t('После какой серии?', 'Қай сериядан кейін?')}
+                    <select
+                      aria-label={t('После какой серии?', 'Қай сериядан кейін?')}
+                      value={q.episode_position ?? 0}
+                      onChange={(e) =>
+                        set(
+                          'questions',
+                          draft.questions.map((x, j) =>
+                            j === i ? { ...x, episode_position: Number(e.target.value) } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {draft.episodes.map((ep, n) => (
+                        <option key={n} value={n}>
+                          {n + 1}. {ep.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label>
                     {t('Правильный ответ', 'Дұрыс жауап')}
                     <select
@@ -1007,6 +1035,7 @@ function SendIcon() {
   return <ArrowRight size={17} />;
 }
 export function ClassesPage() {
+  const catalog = useResource<Season[]>('/catalog');
   const r = useResource<any[]>('/classes'),
     a = useResource<any[]>('/assignments');
   const { t, notify } = useApp();
@@ -1043,6 +1072,37 @@ export function ClassesPage() {
                   {a.data?.filter((x) => x.class_id === c.id).length || 0}{' '}
                   {t('заданий', 'тапсырма')}
                 </p>
+                <label className="form-label class-topic-label">
+                  {t('Сейчас проходим', 'Қазір оқып жатырмыз')}
+                  <select
+                    aria-label={`Текущая тема ${c.name}`}
+                    value={c.current_season_id || ''}
+                    onChange={async (e) => {
+                      try {
+                        await api(`/classes/${c.id}/topic`, {
+                          method: 'PATCH',
+                          body: JSON.stringify({ season_id: e.target.value }),
+                        });
+                        r.reload();
+                        a.reload();
+                        notify(
+                          t('Тема обновлена для всего класса', 'Тақырып бүкіл сыныпқа жаңартылды'),
+                        );
+                      } catch (e) {
+                        notify((e as Error).message);
+                      }
+                    }}
+                  >
+                    <option value="" disabled>
+                      {t('Выберите тему', 'Тақырыпты таңдаңыз')}
+                    </option>
+                    {catalog.data?.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="invite-code">
                   <div>
                     <small>{t('КОД ПРИГЛАШЕНИЯ', 'ШАҚЫРУ КОДЫ')}</small>
@@ -1230,6 +1290,7 @@ export function ResultsPage() {
                 <tr>
                   <th>{t('Ученик / сезон', 'Оқушы / маусым')}</th>
                   <th>{t('Просмотр', 'Көру')}</th>
+                  <th>{t('Микровопросы', 'Микросұрақтар')}</th>
                   <th>{t('Тест', 'Тест')}</th>
                   <th>{t('Пересказ', 'Мазмұндау')}</th>
                   <th>{t('Действие', 'Әрекет')}</th>
@@ -1250,6 +1311,11 @@ export function ResultsPage() {
                       <div className="progress-track">
                         <i style={{ width: `${(x.watched / x.episode_count) * 100}%` }} />
                       </div>
+                    </td>
+                    <td>
+                      <b>
+                        {x.micro_correct}/{x.episode_count}
+                      </b>
                     </td>
                     <td>
                       {x.test_score !== null ? (

@@ -182,6 +182,24 @@ const seasons = [
     ],
   },
 ];
+seasons[1].questions.splice(1, 0, [
+  'Қандай әрекет жауапкершілікті көрсетеді?',
+  ['Пайдалы істі аяқтау', 'Әрқашан кейінге қалдыру', 'Тек уәде беру'],
+  0,
+  'Пайдалы істі соңына дейін орындау еңбек пен жауапкершілікті көрсетеді.',
+]);
+seasons[2].questions.splice(1, 0, [
+  'Что помогает заметить художественный образ?',
+  ['Только номер страницы', 'Слово, создающее картину или ощущение', 'Только год издания'],
+  1,
+  'Образ создаёт картину, звук или ощущение и помогает понять настроение.',
+]);
+seasons[3].questions.push([
+  'Почему города были важны для торговых маршрутов?',
+  ['Давали рынки, отдых и обмен', 'Исключали встречу культур', 'Запрещали торговлю'],
+  0,
+  'Города были местами встречи, отдыха, торговли и обмена.',
+]);
 for (const s of seasons) {
   const exists = await one('SELECT id FROM seasons WHERE id=$1', [s.id]);
   if (!exists) {
@@ -210,6 +228,14 @@ for (const s of seasons) {
       c.release();
     }
   }
+  const episodeList = await rows('SELECT id FROM episodes WHERE season_id=$1 ORDER BY position', [
+    s.id,
+  ]);
+  for (const [i, q] of s.questions.entries())
+    await db.query(
+      'INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(season_id,position) DO UPDATE SET prompt=EXCLUDED.prompt,options=EXCLUDED.options,correct=EXCLUDED.correct,explanation=EXCLUDED.explanation,episode_id=EXCLUDED.episode_id',
+      [randomUUID(), s.id, i, q[0], JSON.stringify(q[1]), q[2], q[3], episodeList[i].id],
+    );
   for (const e of await rows('SELECT * FROM episodes WHERE season_id=$1 ORDER BY position', [
     s.id,
   ])) {
@@ -223,8 +249,8 @@ for (const s of seasons) {
 }
 const classId = '20000000-0000-4000-8000-000000000001';
 await db.query(
-  "INSERT INTO classrooms(id,teacher_id,name,code) VALUES($1,$2,'7 А · История и литература','OYLA7A') ON CONFLICT(id) DO NOTHING",
-  [classId, teacherId],
+  "INSERT INTO classrooms(id,teacher_id,name,code,current_season_id) VALUES($1,$2,'7 А · История и литература','OYLA7A',$3) ON CONFLICT(id) DO NOTHING",
+  [classId, teacherId, seasons[0].id],
 );
 await db.query('INSERT INTO memberships(class_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [
   classId,

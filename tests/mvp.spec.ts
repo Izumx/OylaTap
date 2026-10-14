@@ -314,3 +314,63 @@ test('published teacher seasons are private to assigned classes by default', asy
   expect(catalog.some((x: any) => x.id === id)).toBe(true);
   await student.dispose();
 });
+test('today has three clips, checks understanding after video and ends without loading more', async ({
+  page,
+}) => {
+  const user = await account(page.request, 'student');
+  await page.goto('/');
+  await expect(page.locator('.feed-slide')).toHaveCount(4);
+  const first = page.locator('.feed-slide').first().locator('video');
+  await expect.poll(() => first.evaluate((v: HTMLVideoElement) => v.duration)).toBeGreaterThan(0);
+  await first.evaluate((v: HTMLVideoElement) => {
+    v.currentTime = v.duration - 0.2;
+  });
+  const d = page.getByRole('dialog', { name: 'Один вопрос — и дальше' });
+  await expect(d).toBeVisible();
+  await d.getByRole('button', { name: 'A Создало условия для объединения' }).click();
+  await d.getByRole('button', { name: 'Проверить', exact: true }).click();
+  await expect(d).toContainText('Ответ верный!');
+  await d.getByRole('button', { name: 'Дальше по маршруту' }).click();
+  const progress = await (await page.request.get('/api/progress')).json();
+  expect(progress.stats.micro_correct).toBe(1);
+  expect(progress.stats.watched).toBe(1);
+  const stored = await db.query('SELECT passed FROM micro_answers WHERE user_id=$1', [user.id]);
+  expect(stored.rows).toEqual([{ passed: true }]);
+  await page.locator('.feed-scroll').evaluate((el) => {
+    el.scrollTop = 3 * el.clientHeight;
+  });
+  await expect(page.locator('.session-end')).toBeInViewport();
+  await expect(page.locator('.session-end')).toContainText('Сессия закончилась');
+  await page.mouse.wheel(0, 1500);
+  await expect(page.locator('.feed-slide')).toHaveCount(4);
+});
+test('personal topic preferences persist and teacher topic takes priority for the class', async ({
+  page,
+  playwright,
+}) => {
+  await account(page.request, 'student');
+  await page.goto('/profile');
+  await page
+    .getByRole('combobox', { name: 'Моя текущая тема' })
+    .selectOption('10000000-0000-4000-8000-000000000003');
+  await page.getByRole('button', { name: 'Сохранить учебный план', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Учебный план сохранён');
+  let today = await (await page.request.get('/api/today')).json();
+  expect(today.season_id).toBe('10000000-0000-4000-8000-000000000003');
+  expect(today.topic_source).toBe('personal');
+  const teacher = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  await account(teacher, 'teacher');
+  const c = await (
+    await teacher.post('/api/classes', { data: { name: 'Класс с текущей темой' } })
+  ).json();
+  await page.request.post('/api/classes/join', { data: { code: c.code } });
+  const changed = await teacher.patch(`/api/classes/${c.id}/topic`, { data: { season_id: seed } });
+  expect(changed.ok()).toBe(true);
+  today = await (await page.request.get('/api/today')).json();
+  expect(today.season_id).toBe(seed);
+  expect(today.topic_source).toBe('class');
+  const pref = await (await page.request.get('/api/learning-preferences')).json();
+  expect(pref.current_season_id).toBe('10000000-0000-4000-8000-000000000003');
+  expect(pref.reminder_enabled).toBe(false);
+  await teacher.dispose();
+});

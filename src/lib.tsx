@@ -24,6 +24,7 @@ export type Episode = {
   completed: boolean;
 };
 export type Question = {
+  episode_position?: number;
   id?: string;
   prompt: string;
   options: string[];

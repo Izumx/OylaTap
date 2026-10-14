@@ -3161,3 +3161,225 @@ td .muted {
   margin-top: 8px;
   font-size: 11px;
 }
+.feed-tabs button {
+  height: 100%;
+  position: relative;
+  font-size: inherit;
+  font-weight: 650;
+  color: inherit;
+  padding: 0;
+}
+.feed-tabs button.active {
+  color: #f6f6ed;
+}
+.hidden-actions {
+  display: none;
+}
+.session-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 25px;
+  background: linear-gradient(155deg, #253c26, #142317);
+  overflow: auto;
+}
+.end-orbit {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #c1f17d1b;
+  border: 1px solid #648549;
+  display: grid;
+  place-items: center;
+  color: var(--mint);
+  margin-bottom: 25px;
+}
+.session-end h2 {
+  font-size: 29px;
+  letter-spacing: -1px;
+  line-height: 1.25;
+  margin-bottom: 18px;
+}
+.session-end > p {
+  color: #a7bf99;
+  font-size: 12px;
+  max-width: 320px;
+}
+.end-stats {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+  margin: 10px 0 25px;
+}
+.end-stats > span {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 9px;
+  color: #8fa97c;
+}
+.end-stats b {
+  font-size: 26px;
+  color: var(--mint);
+}
+.tomorrow-topic {
+  padding: 14px;
+  border: 1px solid #49613b;
+  border-radius: 13px;
+  font-size: 9px;
+  color: #879e76;
+  margin-bottom: 20px;
+  width: 100%;
+}
+.tomorrow-topic strong {
+  display: block;
+  color: #d9eacb;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 8px 0;
+}
+.tomorrow-topic small {
+  font-size: 9px;
+  line-height: 1.7;
+  display: block;
+}
+.session-end .button {
+  font-size: 12px;
+  margin-top: 10px;
+}
+.micro-result {
+  padding: 21px;
+  border-radius: 13px;
+  background: #bfec8614;
+  border: 1px solid #648147;
+  margin: 20px 0;
+}
+.micro-result.wrong {
+  background: #dfb16d12;
+  border-color: #786448;
+}
+.micro-result b {
+  font-size: 17px;
+  color: var(--mint);
+}
+.micro-result p {
+  font-size: 13px;
+  color: #b2c4a1;
+  margin: 12px 0 0;
+}
+.micro-result small {
+  font-size: 10px;
+  color: #8c9f7c;
+  display: block;
+  margin-top: 14px;
+}
+.micro-result + .button {
+  margin-top: 15px;
+}
+.learning-preferences {
+  margin-bottom: 25px;
+  max-width: 680px;
+}
+.learning-preferences > p {
+  margin-bottom: 24px;
+}
+.interest-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+}
+.interest-options > label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.interest-options input {
+  margin: 0;
+}
+.reminder-setting {
+  display: flex;
+  gap: 13px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  margin-top: 9px;
+}
+.reminder-setting > svg {
+  margin-top: 5px;
+  color: var(--mint);
+}
+.reminder-setting .consent {
+  margin: 0;
+  align-items: center;
+  font-size: 13px !important;
+}
+.reminder-setting p {
+  font-size: 10px;
+  margin: 12px 0 0;
+}
+.class-topic-label {
+  margin-top: 20px;
+}
+.class-topic-label select {
+  font-size: 11px;
+  margin-top: 8px;
+}
+.learning-xp {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid #405033;
+  border-radius: 13px;
+  margin-bottom: 25px;
+  background: #bde98509;
+  color: var(--mint);
+}
+.learning-xp b {
+  font-size: 17px;
+  display: block;
+}
+.learning-xp small {
+  display: block;
+  font-size: 10px;
+  color: #899f7a;
+  line-height: 1.7;
+  margin-top: 7px;
+}
+@media (max-width: 720px) {
+  .session-end {
+    padding: 50px 23px 22px;
+  }
+  .session-end h2 {
+    font-size: 26px;
+  }
+  .end-orbit {
+    width: 65px;
+    height: 65px;
+    margin-bottom: 18px;
+  }
+  .end-orbit svg {
+    width: 33px;
+    height: 33px;
+  }
+  .session-end > p {
+    font-size: 11px;
+  }
+  .end-stats {
+    margin-bottom: 15px;
+  }
+  .interest-options {
+    grid-template-columns: 1fr;
+  }
+  .learning-preferences .form-stack label {
+    font-size: 11px;
+  }
+  .session-end .text-button {
+    font-size: 11px;
+  }
+}

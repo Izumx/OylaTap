@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-do
 import { Provider } from './lib';
 import { Shell, Private } from './components';
 import Auth from './Auth';
+import { ReminderTicker } from './Learning';
 import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from './Student';
 import { StudioPage, EditorPage, ClassesPage, ResultsPage } from './Teacher';
 import './style.css';
@@ -92,6 +93,7 @@ function App() {
         />
       </Routes>
       <Auth />
+      <ReminderTicker />
     </Shell>
   );
 }

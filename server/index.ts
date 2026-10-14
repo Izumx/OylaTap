@@ -20,6 +20,7 @@ import {
   tokenHash,
 } from './auth.js';
 import { dataDir, renderSeason } from './render.js';
+import { dailyRouter } from './daily.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
 
 const app = express();
@@ -89,6 +90,7 @@ const publicUser = (u: any) => ({
   grade: u.grade,
   language: u.language,
 });
+app.use('/api', dailyRouter(visibilitySql));
 app.get('/api/health', async (req, res) => {
   await db.query('SELECT 1');
   res.json({ ok: true, database: 'PostgreSQL' });
@@ -221,7 +223,7 @@ app.get('/api/seasons/:id', async (req, res) => {
     [id, req.user?.id || null],
   );
   const questions = await rows(
-    `SELECT id,position,prompt,options${owner ? ',correct,explanation' : ''} FROM questions WHERE season_id=$1 ORDER BY position`,
+    `SELECT id,position,prompt,options,episode_id,coalesce((SELECT position FROM episodes WHERE id=questions.episode_id),0) episode_position${owner ? ',correct,explanation' : ''} FROM questions WHERE season_id=$1 ORDER BY position`,
     [id],
   );
   const attempts = req.user
@@ -306,6 +308,8 @@ app.get('/api/progress', required, async (req, res) => {
     `SELECT (SELECT count(*)::int FROM completions WHERE user_id=$1) watched,
   (SELECT count(*)::int FROM attempts WHERE user_id=$1) tests,
   (SELECT count(*)::int FROM retellings WHERE user_id=$1) retellings,
+  (SELECT count(DISTINCT episode_id)::int FROM micro_answers WHERE user_id=$1 AND passed) micro_correct,
+  (SELECT count(DISTINCT episode_id)::int*10 FROM micro_answers WHERE user_id=$1 AND passed)+(SELECT coalesce(sum(best),0)::int*10 FROM (SELECT max(score) best FROM attempts WHERE user_id=$1 GROUP BY season_id) b)+(SELECT count(*)::int*5 FROM retellings WHERE user_id=$1) xp,
   (SELECT coalesce(round(avg(100.0*score/total)),0)::int FROM attempts WHERE user_id=$1) understanding`,
     [id],
   );
@@ -430,6 +434,7 @@ const seasonData = z.object({
         .object({
           prompt: z.string().trim().min(5).max(300),
           options: z.array(z.string().trim().min(1).max(200)).min(2).max(5),
+          episode_position: z.number().int().min(0).max(9).default(0),
           correct: z.number().int().min(0).max(4),
           explanation: z.string().trim().min(5).max(500),
         })
@@ -500,16 +505,19 @@ async function saveSeason(
           data.subject.includes('literature') ? 'book' : 'history',
         ],
       );
+    const episodeIds: string[] = [];
     const previous = (await c.query('SELECT * FROM episodes WHERE season_id=$1', [id])).rows;
     await c.query('DELETE FROM questions WHERE season_id=$1', [id]);
     await c.query('DELETE FROM episodes WHERE season_id=$1', [id]);
     for (const [i, e] of data.episodes.entries()) {
       const old = previous.find((x) => x.id === e.id);
+      const episodeId = old ? e.id! : randomUUID();
+      episodeIds.push(episodeId);
       const keep = old && old.title === e.title && old.script === e.script;
       await c.query(
         'INSERT INTO episodes(id,season_id,position,title,script,media_path,duration) VALUES($1,$2,$3,$4,$5,$6,$7)',
         [
-          old ? e.id : randomUUID(),
+          episodeId,
           id,
           i,
           e.title,
@@ -521,8 +529,17 @@ async function saveSeason(
     }
     for (const [i, q] of data.questions.entries())
       await c.query(
-        'INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation) VALUES($1,$2,$3,$4,$5,$6,$7)',
-        [randomUUID(), id, i, q.prompt, JSON.stringify(q.options), q.correct, q.explanation],
+        'INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+        [
+          randomUUID(),
+          id,
+          i,
+          q.prompt,
+          JSON.stringify(q.options),
+          q.correct,
+          q.explanation,
+          episodeIds[q.episode_position] || null,
+        ],
       );
     await c.query('COMMIT');
     return { id };
@@ -593,6 +610,15 @@ app.post('/api/seasons/:id/publish', required, teacher, async (req, res) => {
       fail('Добавьте или соберите видео для каждой серии');
     if (!(await c.query('SELECT 1 FROM questions WHERE season_id=$1', [s.id])).rowCount)
       fail('Добавьте хотя бы один вопрос с объяснением');
+    if (
+      (
+        await c.query(
+          'SELECT 1 FROM episodes e WHERE e.season_id=$1 AND NOT EXISTS(SELECT 1 FROM questions q WHERE q.episode_id=e.id)',
+          [s.id],
+        )
+      ).rowCount
+    )
+      fail('Добавьте микровопрос к каждой серии');
     await c.query(
       "UPDATE seasons SET status='published',visibility=$2,updated_at=now() WHERE id=$1",
       [s.id, d.visibility],
@@ -763,6 +789,7 @@ async function resultsForTeacher(id: string) {
     `SELECT c.id class_id,c.name class_name,u.id user_id,u.name,s.id season_id,s.title,
     (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
     (SELECT count(*)::int FROM completions p JOIN episodes e ON e.id=p.episode_id WHERE e.season_id=s.id AND p.user_id=u.id) watched,
+    (SELECT count(DISTINCT ma.episode_id)::int FROM micro_answers ma JOIN episodes e ON e.id=ma.episode_id WHERE e.season_id=s.id AND ma.user_id=u.id AND ma.passed) micro_correct,
     (SELECT max(round(100.0*t.score/t.total))::int FROM attempts t WHERE t.season_id=s.id AND t.user_id=u.id) test_score,
     r.id retelling_id,r.teacher_score,r.feedback,r.transcript,r.created_at retelling_at
     FROM classrooms c JOIN memberships m ON m.class_id=c.id JOIN users u ON u.id=m.user_id
@@ -784,7 +811,7 @@ app.get('/api/results.csv', required, teacher, async (req, res) => {
       .replaceAll('"', '""') +
     '"';
   const csv = [
-    'Класс;Ученик;Сезон;Просмотрено;Серий;Тест %;Пересказ %;Комментарий',
+    'Класс;Ученик;Сезон;Просмотрено;Серий;Верные микровопросы;Тест %;Пересказ %;Комментарий',
     ...list.map((r) =>
       [
         r.class_name,
@@ -792,6 +819,7 @@ app.get('/api/results.csv', required, teacher, async (req, res) => {
         r.title,
         r.watched,
         r.episode_count,
+        r.micro_correct,
         r.test_score,
         r.teacher_score,
         r.feedback,
@@ -870,9 +898,13 @@ await db.query(
   "UPDATE seasons SET status='failed',render_error='Сервер перезапущен во время сборки. Можно повторить без потери сценария.' WHERE status='rendering'",
 );
 await db.query('DELETE FROM sessions WHERE expires_at<now()');
-const server = app.listen(Number(process.env.PORT) || 3000, '0.0.0.0', () =>
-  console.log('OylaTap running; database: PostgreSQL'),
-);
+const server = app.listen(Number(process.env.PORT) || 3000, '0.0.0.0', (error?: Error) => {
+  if (error) {
+    console.error('OylaTap could not bind its port:', error.message);
+    process.exit(1);
+  }
+  console.log('OylaTap running; database: PostgreSQL');
+});
 for (const sig of ['SIGINT', 'SIGTERM'])
   process.on(sig, () => {
     server.close(() => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useParams, useLocation } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Play,
   Pause,
@@ -40,12 +40,120 @@ import {
   type Episode,
 } from './lib';
 import { Modal, State, PageHeader, SeasonArt, SeasonCard } from './components';
+import { LearningPreferences } from './Learning';
 
 type Clip = { season: Season; episode: Episode };
+function MicroQuestion({
+  episode,
+  onClose,
+  onPassed,
+  onNext,
+}: {
+  episode: Episode;
+  onClose: () => void;
+  onPassed: () => void;
+  onNext: () => void;
+}) {
+  const r = useResource<any>(`/episodes/${episode.id}/micro`);
+  const { t, user } = useApp();
+  const [answer, setAnswer] = useState<number | null>(null),
+    [result, setResult] = useState<any>(null),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  return (
+    <Modal title={t('Один вопрос — и дальше', 'Бір сұрақ — әрі қарай')} onClose={onClose}>
+      <p className="muted small">{episode.title}</p>
+      <State {...r} retry={r.reload}>
+        {r.data && (
+          <>
+            <h3 className="question-title">{r.data.prompt}</h3>
+            {!result ? (
+              <div className="answer-options">
+                {r.data.options.map((o: string, i: number) => (
+                  <button
+                    key={i}
+                    className={answer === i ? 'selected' : ''}
+                    onClick={() => setAnswer(i)}
+                  >
+                    <span>{String.fromCharCode(65 + i)}</span>
+                    {o}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className={`micro-result ${result.passed ? 'passed' : 'wrong'}`}>
+                <b>
+                  {result.passed
+                    ? t('Ответ верный!', 'Дұрыс жауап!')
+                    : t('Разберём вместе', 'Бірге түсінейік')}
+                </b>
+                <p>{result.explanation}</p>
+                {!user && (
+                  <small>
+                    {t(
+                      'В демо результат не сохраняется. Войди, чтобы видеть свой прогресс.',
+                      'Демода нәтиже сақталмайды. Прогресіңді көру үшін кір.',
+                    )}
+                  </small>
+                )}
+              </div>
+            )}
+            {error && <p className="error-inline">{error}</p>}
+            {!result ? (
+              <button
+                className="button primary full"
+                disabled={answer === null || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const v = await post(`/episodes/${episode.id}/check`, { answer });
+                    setResult(v);
+                    if (v.passed) onPassed();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {t('Проверить', 'Тексеру')}
+                <ArrowRight size={17} />
+              </button>
+            ) : (
+              <>
+                <button className="button primary full" onClick={onNext}>
+                  {t('Дальше по маршруту', 'Маршрутты жалғастыру')}
+                  <ArrowRight size={17} />
+                </button>
+                {!result.passed && (
+                  <button
+                    className="text-button full"
+                    onClick={() => {
+                      setResult(null);
+                      setAnswer(null);
+                    }}
+                  >
+                    {t('Попробовать ещё раз', 'Қайта байқап көру')}
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </State>
+    </Modal>
+  );
+}
 export function Feed() {
   const { id } = useParams();
-  const loc = useLocation();
-  const { user, t, locale, notify, login } = useApp();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const startEpisode = Math.max(0, Number(searchParams.get('episode') || 0));
+  const [mode, setMode] = useState<'school' | 'free'>('school'),
+    [today, setToday] = useState<any>(null),
+    [micro, setMicro] = useState<Episode | null>(null),
+    [passed, setPassed] = useState<Set<string>>(new Set());
+  const { user, t, locale, notify, login, authOpen } = useApp();
   const [clips, setClips] = useState<Clip[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
@@ -60,11 +168,23 @@ export function Feed() {
     setLoading(true);
     setError('');
     (async () => {
-      const list: Season[] = id ? [await api(`/seasons/${id}`)] : await api('/catalog');
-      const all = id ? list : await Promise.all(list.map((s) => api<Season>(`/seasons/${s.id}`)));
+      const daily = id ? null : await api(`/today?mode=${mode}`);
+      const all: Season[] = id
+        ? [await api(`/seasons/${id}`)]
+        : daily.season_id
+          ? [await api(`/seasons/${daily.season_id}`)]
+          : [];
+      if (alive) {
+        setToday(daily);
+        setPassed(new Set(daily?.correct_ids || []));
+      }
       if (alive) {
         setClips(
-          all.flatMap((season) => (season.episodes || []).map((episode) => ({ season, episode }))),
+          all.flatMap((season) =>
+            (season.episodes || [])
+              .filter((e) => id || daily.episode_ids.includes(e.id))
+              .map((episode) => ({ season, episode })),
+          ),
         );
         setActive(0);
         scroll.current?.scrollTo(0, 0);
@@ -79,19 +199,29 @@ export function Feed() {
     return () => {
       alive = false;
     };
-  }, [id, user?.id, version]);
-  const current = clips[active];
+  }, [id, user?.id, version, mode]);
+  const current = clips[Math.min(active, clips.length - 1)];
+  const atEnd = active === clips.length;
   const go = useCallback(
     (n: number) => {
       const el = scroll.current;
       if (!el) return;
       el.scrollTo({
-        top: Math.max(0, Math.min(n, clips.length - 1)) * el.clientHeight,
+        top: Math.max(0, Math.min(n, clips.length)) * el.clientHeight,
         behavior: 'smooth',
       });
     },
     [clips.length],
   );
+  useEffect(() => {
+    if (loading || !clips.length) return;
+    const target = id
+      ? Math.min(startEpisode, clips.length - 1)
+      : today?.correct >= today?.goal
+        ? clips.length
+        : 0;
+    requestAnimationFrame(() => go(Number.isFinite(target) ? target : 0));
+  }, [loading, id, startEpisode, today?.correct, today?.goal, clips.length, go]);
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
       if (
@@ -152,10 +282,24 @@ export function Feed() {
     <div className="feed-page">
       <header className="feed-top">
         <div className="feed-tabs">
-          <Link to="/" className={!id ? 'active' : ''}>
-            {t('Для тебя', 'Сен үшін')}
-          </Link>
-          <Link to="/assignments">{t('От учителя', 'Мұғалімнен')}</Link>
+          <button
+            className={!id && mode === 'school' ? 'active' : ''}
+            onClick={() => {
+              setMode('school');
+              if (id) navigate('/');
+            }}
+          >
+            {t('Сегодня', 'Бүгін')}
+          </button>
+          <button
+            className={!id && mode === 'free' ? 'active' : ''}
+            onClick={() => {
+              setMode('free');
+              if (id) navigate('/');
+            }}
+          >
+            {t('По интересам', 'Қызығушылықтар')}
+          </button>
           {id && <span className="active">{t('Сезон', 'Маусым')}</span>}
         </div>
         <Link className="feed-search" to="/library" aria-label="Найти сезон">
@@ -177,9 +321,7 @@ export function Feed() {
                 onScroll={() => {
                   const el = scroll.current;
                   if (el)
-                    setActive(
-                      Math.min(clips.length - 1, Math.round(el.scrollTop / el.clientHeight)),
-                    );
+                    setActive(Math.min(clips.length, Math.round(el.scrollTop / el.clientHeight)));
                 }}
                 aria-label="Вертикальная лента. Листайте вверх или вниз."
               >
@@ -187,15 +329,71 @@ export function Feed() {
                   <div className="feed-slide" key={c.episode.id}>
                     <FeedVideo
                       clip={c}
-                      active={i === active}
+                      active={i === active && !modal && !micro && !authOpen}
                       muted={muted}
-                      onEnded={() => void complete(c.episode)}
+                      onEnded={() => {
+                        void complete(c.episode);
+                        setMicro(c.episode);
+                      }}
                       onQuiz={() => open('quiz')}
                     />
                   </div>
                 ))}
+                <div className="feed-slide session-end">
+                  <div className="end-orbit">
+                    <CheckCheck size={45} />
+                  </div>
+                  <span className="eyebrow">{t('В СВОЁМ ТЕМПЕ', 'ӨЗ ҚАРҚЫНЫҢМЕН')}</span>
+                  <h2>
+                    {t(
+                      passed.size >= clips.length ? 'Цель дня выполнена' : 'Сессия закончилась',
+                      passed.size >= clips.length ? 'Күндік мақсат орындалды' : 'Сессия аяқталды',
+                    )}
+                  </h2>
+                  <p>
+                    {t(
+                      'Лента делает паузу. Можно закончить на сегодня или продолжить по желанию.',
+                      'Лента үзіліс жасайды. Бүгін аяқтауға немесе қалауыңша жалғастыруға болады.',
+                    )}
+                  </p>
+                  <div className="end-stats">
+                    <span>
+                      <b>{clips.length}</b>
+                      {t('серии в маршруте', 'маршруттағы серия')}
+                    </span>
+                    <span>
+                      <b>
+                        {passed.size}/{clips.length}
+                      </b>
+                      {t('верных микровопросов', 'дұрыс микросұрақ')}
+                    </span>
+                  </div>
+                  {today?.tomorrow && (
+                    <div className="tomorrow-topic">
+                      {t('Следующая встреча с темой', 'Тақырыппен келесі кездесу')}
+                      <strong>{today.tomorrow}</strong>
+                      <small>
+                        {t(
+                          'Продолжим разбирать и повторим сложное. Тему может изменить учитель.',
+                          'Жалғастырып, күрделі тұстарын қайталаймыз. Мұғалім тақырыпты өзгерте алады.',
+                        )}
+                      </small>
+                    </div>
+                  )}
+                  <button className="button primary full" onClick={() => go(0)}>
+                    <RotateCcw size={17} />
+                    {t('Повторить серии', 'Серияларды қайталау')}
+                  </button>
+                  <Link className="button secondary full" to="/library">
+                    {t('Самому выбрать другую тему', 'Басқа тақырып таңдау')}
+                    <ArrowRight size={17} />
+                  </Link>
+                  <Link className="text-button" to="/progress">
+                    {t('Посмотреть прогресс', 'Прогресті көру')}
+                  </Link>
+                </div>
               </div>
-              <div className="feed-actions">
+              <div className={`feed-actions ${atEnd ? 'hidden-actions' : ''}`}>
                 <button onClick={() => setModal('chapters')} aria-label="Содержание сезона">
                   <span>
                     <BookOpen size={25} />
@@ -238,7 +436,7 @@ export function Feed() {
                 </button>
                 <button
                   aria-label="Следующая серия"
-                  disabled={active === clips.length - 1}
+                  disabled={active === clips.length}
                   onClick={() => go(active + 1)}
                 >
                   <ChevronDown size={26} />
@@ -248,7 +446,10 @@ export function Feed() {
             {current && (
               <aside className="season-panel">
                 <div className="eyebrow">
-                  {t('МАЛЕНЬКИЕ СЕРИИ. БОЛЬШИЕ ОТКРЫТИЯ.', 'ШАҒЫН СЕРИЯЛАР. ҮЛКЕН ЖАҢАЛЫҚТАР.')}
+                  {t(
+                    today?.topic_source === 'class' ? 'СЕГОДНЯ В КЛАССЕ' : 'ТВОЯ ТЕМА СЕГОДНЯ',
+                    today?.topic_source === 'class' ? 'БҮГІН СЫНЫПТА' : 'БҮГІНГІ ТАҚЫРЫБЫҢ',
+                  )}
                 </div>
                 <h1>{current.season.title}</h1>
                 <p>{current.season.description}</p>
@@ -261,38 +462,40 @@ export function Feed() {
                 <div className="chapter-header">
                   <h3>{t('Твой маршрут', 'Сенің жолың')}</h3>
                   <span>
-                    {current.episode.position + 1}/{current.season.episodes!.length}
+                    {Math.min(active + 1, clips.length)}/{clips.length}
                   </span>
                 </div>
                 <div className="chapter-list">
-                  {current.season.episodes!.map((ep, i) => (
-                    <button
-                      key={ep.id}
-                      className={ep.id === current.episode.id ? 'active' : ''}
-                      onClick={() => go(clips.findIndex((c) => c.episode.id === ep.id))}
-                    >
-                      <span className="chapter-number">
-                        {clips.find((c) => c.episode.id === ep.id)?.episode.completed ? (
-                          <Check size={16} />
-                        ) : (
-                          String(i + 1).padStart(2, '0')
-                        )}
-                      </span>
-                      <span>
-                        <b>{ep.title}</b>
-                        <small>
-                          {ep.duration} {t('сек', 'сек')}
-                        </small>
-                      </span>
-                      {ep.id === current.episode.id && (
-                        <span className="equalizer">
-                          <i />
-                          <i />
-                          <i />
+                  {current.season
+                    .episodes!.filter((ep) => id || clips.some((c) => c.episode.id === ep.id))
+                    .map((ep, i) => (
+                      <button
+                        key={ep.id}
+                        className={ep.id === current.episode.id ? 'active' : ''}
+                        onClick={() => go(clips.findIndex((c) => c.episode.id === ep.id))}
+                      >
+                        <span className="chapter-number">
+                          {clips.find((c) => c.episode.id === ep.id)?.episode.completed ? (
+                            <Check size={16} />
+                          ) : (
+                            String(i + 1).padStart(2, '0')
+                          )}
                         </span>
-                      )}
-                    </button>
-                  ))}
+                        <span>
+                          <b>{ep.title}</b>
+                          <small>
+                            {ep.duration} {t('сек', 'сек')}
+                          </small>
+                        </span>
+                        {ep.id === current.episode.id && (
+                          <span className="equalizer">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                        )}
+                      </button>
+                    ))}
                 </div>
                 <button className="quiz-banner" onClick={() => open('quiz')}>
                   <span className="quiz-icon">
@@ -322,13 +525,29 @@ export function Feed() {
                   </p>
                 </div>
                 <div className="demo-label">
-                  {t('Демонстрационный контент · без озвучки', 'Демонстрациялық мазмұн · дыбыссыз')}
+                  {current.season.source_name.startsWith('Демонстрационные')
+                    ? t(
+                        'Демонстрационный контент · без озвучки',
+                        'Демонстрациялық мазмұн · дыбыссыз',
+                      )
+                    : t('Материал проверен учителем', 'Материалды мұғалім тексерді')}
                 </div>
               </aside>
             )}
           </div>
         )}
       </State>
+      {micro && (
+        <MicroQuestion
+          episode={micro}
+          onClose={() => setMicro(null)}
+          onPassed={() => setPassed((old) => new Set([...old, micro.id]))}
+          onNext={() => {
+            setMicro(null);
+            go(active + 1);
+          }}
+        />
+      )}
       {current && modal === 'chapters' && (
         <Modal title={current.season.title} onClose={() => setModal(null)}>
           <p className="muted">{current.season.description}</p>
@@ -337,7 +556,9 @@ export function Feed() {
               <button
                 key={ep.id}
                 onClick={() => {
-                  go(clips.findIndex((c) => c.episode.id === ep.id));
+                  const target = clips.findIndex((c) => c.episode.id === ep.id);
+                  if (target >= 0) go(target);
+                  else navigate(`/watch/${current.season.id}?episode=${ep.position}`);
                   setModal(null);
                 }}
               >
@@ -1163,6 +1384,21 @@ export function ProgressPage() {
                 label={t('Средний результат теста', 'Тесттің орташа нәтижесі')}
               />
             </div>
+            <div className="learning-xp">
+              <Sparkles size={22} />
+              <span>
+                <b>
+                  {s.xp} {t('опыта', 'тәжірибе')}
+                </b>
+                <small>
+                  {s.micro_correct}{' '}
+                  {t(
+                    'серий с верным микровопросом · просмотр сам по себе не означает понимание',
+                    'дұрыс микросұрағы бар серия',
+                  )}
+                </small>
+              </span>
+            </div>
             <div className="progress-panels">
               <section className="panel">
                 <div className="panel-heading">
@@ -1281,6 +1517,7 @@ export function ProfilePage() {
         title={t('Как тебе удобно', 'Өзіңе ыңғайлы')}
         description={t('Настрой обучение под себя.', 'Оқуды өзіңе бейімде.')}
       />
+      {user?.role === 'student' && <LearningPreferences />}
       <div className="profile-grid">
         <section className="panel">
           <div className="profile-identity">
