@@ -24,6 +24,7 @@ export type Episode = {
   completed: boolean;
 };
 export type Question = {
+  purpose?: 'micro' | 'final';
   episode_position?: number;
   id?: string;
   prompt: string;
@@ -64,6 +65,9 @@ export type Season = {
   duration: number;
   completed: number;
   best_score: number | null;
+  last_score?: number | null;
+  previous_score?: number | null;
+  quiz_mode?: 'final' | 'legacy';
   source_name: string;
   source_text?: string;
   render_error?: string;
@@ -72,6 +76,11 @@ export type Season = {
   attempts?: any[];
   retellings?: any[];
 };
+export function testQuestions(season: Season) {
+  const questions = season.questions || [];
+  const final = questions.filter((q) => q.purpose === 'final');
+  return final.length ? final : questions;
+}
 export const subjects: Record<string, [string, string]> = {
   'kz-history': ['История Казахстана', 'Қазақстан тарихы'],
   'world-history': ['Всемирная история', 'Дүниежүзі тарихы'],

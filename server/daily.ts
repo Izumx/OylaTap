@@ -14,7 +14,7 @@ export function dailyRouter(visibilitySql: string) {
   });
   router.get('/episodes/:id/micro', async (req, res) => {
     const q = await one(
-      `SELECT q.id,q.prompt,q.options FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
+      `SELECT q.id,q.prompt,q.options FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND q.purpose='micro' AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
       [req.user?.id || null, uid.parse(req.params.id)],
     );
     if (!q) {
@@ -27,7 +27,7 @@ export function dailyRouter(visibilitySql: string) {
     const id = uid.parse(req.params.id),
       { answer } = z.object({ answer: z.number().int().min(0).max(4) }).parse(req.body);
     const q = await one(
-      `SELECT q.* FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
+      `SELECT q.* FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND q.purpose='micro' AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
       [req.user?.id || null, id],
     );
     if (!q || answer >= q.options.length) {

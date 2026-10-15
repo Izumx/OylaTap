@@ -39,6 +39,7 @@ import {
   useResource,
   subjects,
   minutes,
+  testQuestions,
   type Season,
   type Episode,
   type DailySession,
@@ -732,7 +733,7 @@ export function Feed() {
                   <span>
                     <b>{t('Проверь себя', 'Өзіңді тексер')}</b>
                     <small>
-                      {current.season.questions?.length}{' '}
+                      {testQuestions(current.season).length}{' '}
                       {t('вопроса · без таймера', 'сұрақ · таймерсіз')}
                     </small>
                   </span>
@@ -1016,7 +1017,7 @@ export function Quiz({
   onReview: (position: number) => void;
 }) {
   const { t } = useApp();
-  const questions = season.questions || [];
+  const questions = testQuestions(season);
   const [index, setIndex] = useState(0),
     [answers, setAnswers] = useState<number[]>([]),
     [result, setResult] = useState<any>(null),
@@ -1094,6 +1095,18 @@ export function Quiz({
               );
             })}
           </div>
+          <Link className="button secondary full" to={`/attempts/${result.id}`} onClick={onClose}>
+            {t('Открыть сохранённый разбор', 'Сақталған талдауды ашу')} <ArrowRight size={17} />
+          </Link>
+          {result.score < result.total && (
+            <Link
+              className="text-button full"
+              to={`/attempts/${result.id}/practice`}
+              onClick={onClose}
+            >
+              {t('Повторить только ошибки', 'Тек қателерді қайталау')}
+            </Link>
+          )}
           <button className="button primary full" onClick={onRecord}>
             <Mic size={18} />
             {t('Рассказать своими словами', 'Өз сөзіммен айту')}
@@ -1116,6 +1129,14 @@ export function Quiz({
       ) : (
         <>
           <p className="muted small">{season.title}</p>
+          {season.quiz_mode === 'legacy' && (
+            <p className="inline-note">
+              {t(
+                'В этой теме пока используются вопросы серий. Это повторение прежнего формата, а не отдельный итоговый тест.',
+                'Бұл тақырыпта әзірге серия сұрақтары қолданылады. Бұл бөлек қорытынды тест емес, бұрынғы форматтағы қайталау.',
+              )}
+            </p>
+          )}
           <div className="quiz-progress">
             <span>
               {t('Вопрос', 'Сұрақ')} {index + 1}/{questions.length}
@@ -1651,7 +1672,7 @@ export function ProgressPage() {
     (season: Season) =>
       season.completed < season.episode_count ||
       season.best_score === null ||
-      season.best_score < 100,
+      (season.last_score ?? season.best_score) < 100,
   );
   return (
     <div className="page">
@@ -1665,6 +1686,12 @@ export function ProgressPage() {
           'Просмотр, тест и пересказ — разные шаги. Здесь видно каждый из них.',
           'Көру, тест және мазмұндау — бөлек қадамдар.',
         )}
+        action={
+          <Link className="button secondary" to="/attempts">
+            <ListChecks size={17} />
+            {t('История тестов', 'Тесттер тарихы')}
+          </Link>
+        }
       />
       <State {...r} retry={r.reload}>
         {s && (
@@ -1687,10 +1714,53 @@ export function ProgressPage() {
               />
               <Stat
                 icon={<Target />}
-                value={s.tests ? `${s.understanding}%` : '—'}
-                label={t('Средний результат теста', 'Тесттің орташа нәтижесі')}
+                value={s.latest_test_average !== null ? `${s.latest_test_average}%` : '—'}
+                label={t('Средний последний балл', 'Соңғы балдардың орташа мәні')}
               />
             </div>
+            <p className="muted small metric-explanation">
+              {t(
+                'Для среднего берётся последняя попытка по каждой теме. Лучшие результаты показаны отдельно; упражнения по ошибкам их не меняют.',
+                'Орташа мәнге әр тақырыптың соңғы талпынысы алынады. Үздік нәтижелер бөлек көрсетіледі; қате бойынша жаттығулар оларды өзгертпейді.',
+              )}
+            </p>
+            {r.data.seasons.some((season: Season) => season.last_score !== null) && (
+              <section className="panel score-trends">
+                <h2>{t('Последний и лучший результат', 'Соңғы және үздік нәтиже')}</h2>
+                {r.data.seasons
+                  .filter((season: Season) => season.last_score !== null)
+                  .map((season: Season) => (
+                    <Link
+                      className="score-trend"
+                      key={season.id}
+                      to={`/attempts?season_id=${season.id}`}
+                    >
+                      <strong>{season.title}</strong>
+                      <span>
+                        {t('Последний', 'Соңғы')}: {season.last_score}% · {t('Лучший', 'Үздік')}:{' '}
+                        {season.best_score}%
+                      </span>
+                      {season.previous_score !== null && season.previous_score !== undefined && (
+                        <small>
+                          {t('Предыдущий', 'Алдыңғы')}: {season.previous_score}% ·{' '}
+                          {t('Изменение', 'Өзгеріс')}:{' '}
+                          {season.last_score! - season.previous_score > 0 ? '+' : ''}
+                          {season.last_score! - season.previous_score} {t('п.п.', 'п.т.')}
+                        </small>
+                      )}
+                      <span className="text-button">
+                        {t('Посмотреть попытки', 'Талпыныстарды көру')} <ArrowRight size={15} />
+                      </span>
+                    </Link>
+                  ))}
+                <p className="muted small">
+                  {t(
+                    `Повторений ошибок: ${s.practices}. Это отдельная практика.`,
+                    `Қателерді қайталау: ${s.practices}. Бұл бөлек жаттығу.`,
+                  )}
+                </p>
+              </section>
+            )}
             <div className="learning-xp">
               <Sparkles size={22} />
               <span>

@@ -103,7 +103,7 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
           <button
             className="language-control"
             onClick={() => setLocale(locale === 'ru' ? 'kk' : 'ru')}
-            aria-label="Сменить язык"
+            aria-label={t('Сменить язык', 'Тілді ауыстыру')}
           >
             <Globe2 size={16} />
             <span>Русский / Қазақша</span>
@@ -159,6 +159,7 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
           </button>
           <button
             className="language-pill"
+            aria-label={t('Сменить язык', 'Тілді ауыстыру')}
             onClick={() => setLocale(locale === 'ru' ? 'kk' : 'ru')}
           >
             {locale.toUpperCase()}

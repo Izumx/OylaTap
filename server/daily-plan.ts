@@ -104,7 +104,7 @@ async function selectPlan(
           `SELECT a.season_id,c.name FROM assignments a
            JOIN classrooms c ON c.id=a.class_id JOIN memberships m ON m.class_id=c.id
            WHERE m.user_id=$1 AND a.season_id=ANY($2::uuid[])
-           AND (NOT EXISTS(SELECT 1 FROM attempts t WHERE t.user_id=$1 AND t.season_id=a.season_id)
+           AND (NOT EXISTS(SELECT 1 FROM assessment_attempts t WHERE t.user_id=$1 AND t.season_id=a.season_id)
              OR EXISTS(SELECT 1 FROM episodes e WHERE e.season_id=a.season_id
                AND NOT EXISTS(SELECT 1 FROM completions p WHERE p.user_id=$1 AND p.episode_id=e.id)))
            ORDER BY a.due_at,a.created_at,a.id LIMIT 1`,
@@ -119,9 +119,10 @@ async function selectPlan(
     } else if (mode === 'free' && user) {
       const weak = (
         await client.query(
-          `SELECT season_id FROM attempts WHERE user_id=$1 AND season_id=ANY($2::uuid[])
-           GROUP BY season_id HAVING max(100.0*score/total)<70
-           ORDER BY max(100.0*score/total),season_id LIMIT 1`,
+          `SELECT season_id FROM (SELECT DISTINCT ON(season_id) season_id,score,total
+           FROM assessment_attempts WHERE user_id=$1 AND season_id=ANY($2::uuid[])
+           ORDER BY season_id,created_at DESC,id DESC) latest WHERE 100.0*score/total<70
+           ORDER BY 100.0*score/total,season_id LIMIT 1`,
           [userId, visible.map((s) => s.id)],
         )
       ).rows[0];
@@ -182,7 +183,7 @@ async function selectPlan(
   const next = remaining.find((e) => !selection.episode_ids.includes(e.id));
   const checks = (
     await client.query(
-      `SELECT EXISTS(SELECT 1 FROM attempts WHERE user_id=$1 AND season_id=$2) has_test,
+      `SELECT EXISTS(SELECT 1 FROM assessment_attempts WHERE user_id=$1 AND season_id=$2) has_test,
        EXISTS(SELECT 1 FROM retellings WHERE user_id=$1 AND season_id=$2) has_retelling`,
       [userId, season.id],
     )

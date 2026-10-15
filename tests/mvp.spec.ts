@@ -42,6 +42,17 @@ async function draft(request: APIRequestContext) {
           correct: 1,
           explanation: 'Связь причин и последствий помогает объяснить событие.',
         },
+        {
+          purpose: 'final',
+          prompt: 'Как объяснить последствия исторического события?',
+          options: [
+            'Назвать только дату',
+            'Связать причины и последующие изменения',
+            'Назвать только имя',
+          ],
+          correct: 1,
+          explanation: 'Объяснение связывает причины, событие и последующие изменения.',
+        },
       ],
     },
   });
@@ -92,14 +103,18 @@ test('quiz grades on server, explains mistakes, persists progress in PostgreSQL'
   await page.goto(`/watch/${seed}`);
   await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
   const d = page.getByRole('dialog');
-  await d.getByRole('button', { name: 'A Создало условия для объединения' }).click();
+  await d
+    .getByRole('button', { name: 'A Недовольство подтолкнуло людей искать новые условия' })
+    .click();
   await d.getByRole('button', { name: 'Дальше' }).click();
-  await d.getByRole('button', { name: 'A Абылай и Кенесары' }).click();
+  await d.getByRole('button', { name: 'A Оно заменило любые решения племён' }).click();
   await d.getByRole('button', { name: 'Дальше' }).click();
-  await d.getByRole('button', { name: 'A В Жетысу' }).click();
+  await d
+    .getByRole('button', { name: 'A Связать причины переселения и последующее объединение' })
+    .click();
   await d.getByRole('button', { name: 'Показать результат' }).click();
   await expect(d.locator('.quiz-result h3')).toHaveText('2 из 3');
-  await expect(d.locator('.wrong')).toContainText('Керей и Жанибек');
+  await expect(d.locator('.wrong')).toContainText('Земли дали условия для нового объединения');
   await d.getByRole('button', { name: 'Закрыть', exact: true }).click();
   await page.goto('/progress');
   await expect(page.locator('.stat-card').nth(1)).toContainText('1');
@@ -126,7 +141,7 @@ test('teacher imports material, edits quiz, renders, previews and publishes', as
   await expect(page.getByLabel('Или вставьте текст')).toContainText('Историческое событие');
   await page.getByRole('button', { name: 'Подготовить серии' }).click();
   await page.getByLabel('Название серии').fill('Почему меняется общество');
-  await page.getByRole('button', { name: 'Вопрос', exact: true }).click();
+  await page.getByRole('button', { name: 'Микровопрос', exact: true }).click();
   await page.getByLabel('Формулировка', { exact: true }).fill('Как понять историческое событие?');
   await page.getByLabel('A', { exact: true }).fill('Запомнить одну дату');
   await page.getByLabel('B', { exact: true }).fill('Связать причины и последствия');
@@ -135,6 +150,20 @@ test('teacher imports material, edits quiz, renders, previews and publishes', as
   await page
     .getByLabel('Объяснение после ответа')
     .fill('Связь причин и последствий помогает объяснить событие.');
+  await page.getByRole('button', { name: 'Итоговый вопрос', exact: true }).click();
+  const finalQuestion = page.locator('.question-editor').last();
+  await finalQuestion
+    .getByLabel('Формулировка', { exact: true })
+    .fill('Как объяснить изменения в обществе?');
+  await finalQuestion.getByLabel('A', { exact: true }).fill('Назвать одну дату');
+  await finalQuestion
+    .getByLabel('B', { exact: true })
+    .fill('Показать причины и последующие изменения');
+  await finalQuestion.getByLabel('C', { exact: true }).fill('Не учитывать события');
+  await finalQuestion.getByLabel('Правильный ответ', { exact: true }).selectOption('1');
+  await finalQuestion
+    .getByLabel('Объяснение после ответа')
+    .fill('Объяснение связывает причины и изменения.');
   await page.getByRole('button', { name: 'К видео', exact: true }).click();
   await expect(page).toHaveURL(/\/studio\/[0-9a-f-]+$/);
   await page.getByRole('button', { name: 'Собрать карточки', exact: true }).click();
@@ -364,7 +393,7 @@ test('personal topic preferences persist and teacher topic takes priority for th
     .getByRole('combobox', { name: 'Моя текущая тема' })
     .selectOption('10000000-0000-4000-8000-000000000003');
   await page.getByRole('button', { name: 'Сохранить учебный план', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Учебный план сохранён');
+  await expect(page.getByRole('status').filter({ hasText: 'Учебный план сохранён' })).toBeVisible();
   let today = await (await page.request.get('/api/today')).json();
   expect(today.season_id).toBe('10000000-0000-4000-8000-000000000003');
   expect(today.topic_source).toBe('personal');
@@ -421,11 +450,15 @@ test('topic journey resumes unwatched video, reviews a quiz mistake and keeps pr
   await expect(page.locator('.session-end')).toBeInViewport();
   await page.getByRole('button', { name: 'Закрепить тему: пройти тест' }).click();
   const quiz = page.getByRole('dialog', { name: 'Проверь понимание' });
-  await quiz.getByRole('button', { name: 'A Создало условия для объединения' }).click();
+  await quiz
+    .getByRole('button', { name: 'A Недовольство подтолкнуло людей искать новые условия' })
+    .click();
   await quiz.getByRole('button', { name: 'Дальше', exact: true }).click();
-  await quiz.getByRole('button', { name: 'A Абылай и Кенесары' }).click();
+  await quiz.getByRole('button', { name: 'A Оно заменило любые решения племён' }).click();
   await quiz.getByRole('button', { name: 'Дальше', exact: true }).click();
-  await quiz.getByRole('button', { name: 'A В Жетысу' }).click();
+  await quiz
+    .getByRole('button', { name: 'A Связать причины переселения и последующее объединение' })
+    .click();
   await quiz.getByRole('button', { name: 'Показать результат' }).click();
   await expect(quiz.locator('.quiz-result h3')).toHaveText('2 из 3');
   await quiz.getByRole('button', { name: 'Повторить серию: Новое начало в Жетысу' }).click();

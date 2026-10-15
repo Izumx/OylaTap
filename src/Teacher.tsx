@@ -94,6 +94,7 @@ export function StudioPage() {
 }
 type DraftEpisode = { id?: string; title: string; script: string; has_video?: boolean };
 type DraftQuestion = {
+  purpose?: 'micro' | 'final';
   episode_position?: number;
   prompt: string;
   options: string[];
@@ -548,35 +549,67 @@ export function EditorPage() {
                 </section>
               ))}
             </div>
-            <div className="section-heading">
+            <div className="section-heading question-section-heading">
               <div>
                 <h2>{t('Вопросы на понимание', 'Түсінуге арналған сұрақтар')}</h2>
                 <p className="muted">
                   {t(
-                    'Добавьте микровопрос к каждой серии и объяснение ответа.',
-                    'Жауаптар мен түсіндірме қосыңыз. Кемінде бір сұрақ қажет.',
+                    'Микровопрос — после серии. Для итогового теста добавьте другие вопросы с объяснениями и связанной серией.',
+                    'Микросұрақ сериядан кейін беріледі. Қорытынды тестке түсіндірмесі және байланысты сериясы бар басқа сұрақтар қосыңыз.',
                   )}
                 </p>
               </div>
               <button
                 className="button secondary"
-                disabled={locked || draft.questions.length >= 15}
+                disabled={locked || draft.questions.length >= 25}
                 onClick={() =>
                   set('questions', [
                     ...draft.questions,
-                    { prompt: '', options: ['', '', ''], correct: 0, explanation: '' },
+                    {
+                      purpose: 'micro',
+                      prompt: '',
+                      options: ['', '', ''],
+                      correct: 0,
+                      explanation: '',
+                    },
                   ])
                 }
               >
                 <Plus size={17} />
-                {t('Вопрос', 'Сұрақ')}
+                {t('Микровопрос', 'Микросұрақ')}
+              </button>
+              <button
+                className="button secondary"
+                disabled={
+                  locked ||
+                  draft.questions.length >= 25 ||
+                  draft.questions.filter((q) => q.purpose === 'final').length >= 15
+                }
+                onClick={() =>
+                  set('questions', [
+                    ...draft.questions,
+                    {
+                      purpose: 'final',
+                      prompt: '',
+                      options: ['', '', ''],
+                      correct: 0,
+                      explanation: '',
+                    },
+                  ])
+                }
+              >
+                <Plus size={17} />
+                {t('Итоговый вопрос', 'Қорытынды сұрақ')}
               </button>
             </div>
             {draft.questions.map((q, i) => (
               <section className="panel question-editor" key={i}>
                 <div className="panel-heading">
                   <h3>
-                    {t('Вопрос', 'Сұрақ')} {i + 1}
+                    {q.purpose === 'final'
+                      ? t('Итоговый вопрос', 'Қорытынды сұрақ')
+                      : t('Микровопрос', 'Микросұрақ')}{' '}
+                    {i + 1}
                   </h3>
                   {!locked && (
                     <button
@@ -594,6 +627,25 @@ export function EditorPage() {
                   )}
                 </div>
                 <fieldset disabled={locked || busy} className="form-stack">
+                  <label>
+                    {t('Назначение вопроса', 'Сұрақтың мақсаты')}
+                    <select
+                      value={q.purpose || 'micro'}
+                      onChange={(e) =>
+                        set(
+                          'questions',
+                          draft.questions.map((x, j) =>
+                            j === i ? { ...x, purpose: e.target.value as 'micro' | 'final' } : x,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="micro">
+                        {t('Микровопрос после серии', 'Сериядан кейінгі микросұрақ')}
+                      </option>
+                      <option value="final">{t('Итоговый тест', 'Қорытынды тест')}</option>
+                    </select>
+                  </label>
                   <label>
                     {t('Формулировка', 'Сұрақ мәтіні')}
                     <input
@@ -1291,7 +1343,7 @@ export function ResultsPage() {
                   <th>{t('Ученик / сезон', 'Оқушы / маусым')}</th>
                   <th>{t('Просмотр', 'Көру')}</th>
                   <th>{t('Микровопросы', 'Микросұрақтар')}</th>
-                  <th>{t('Тест', 'Тест')}</th>
+                  <th>{t('Лучший тест', 'Үздік тест')}</th>
                   <th>{t('Пересказ', 'Мазмұндау')}</th>
                   <th>{t('Действие', 'Әрекет')}</th>
                 </tr>

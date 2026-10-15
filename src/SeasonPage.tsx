@@ -10,7 +10,7 @@ import {
   Mic,
   Play,
 } from 'lucide-react';
-import { useApp, useResource, subjects, minutes, type Season } from './lib';
+import { useApp, useResource, subjects, minutes, testQuestions, type Season } from './lib';
 import { SeasonArt, State } from './components';
 import { Quiz, Recorder } from './Student';
 
@@ -36,7 +36,7 @@ export function SeasonPage() {
   const resume = next >= 0 ? next : episodes.findIndex((ep) => ep.has_video);
   const latest = season?.attempts?.[0];
   const retelling = season?.retellings?.[0];
-  const hasQuiz = Boolean(season?.questions?.length);
+  const hasQuiz = Boolean(season && testQuestions(season).length);
   const open = (step: 'quiz' | 'record') => {
     if (!user) login();
     else setModal(step);
@@ -76,7 +76,7 @@ export function SeasonPage() {
                     {t('мин видео', 'мин видео')}
                   </span>
                   <span>
-                    <ListChecks size={15} /> {season.questions?.length || 0} {t('вопроса', 'сұрақ')}
+                    <ListChecks size={15} /> {testQuestions(season).length} {t('вопроса', 'сұрақ')}
                   </span>
                 </div>
                 {!allWatched && resume >= 0 ? (
@@ -206,6 +206,19 @@ export function SeasonPage() {
                   )}
                 </li>
               </ol>
+              {user && (
+                <div className="assessment-actions topic-history">
+                  {latest && (
+                    <Link className="button secondary" to={`/attempts/${latest.id}`}>
+                      {t('Разобрать последнюю попытку', 'Соңғы талпынысты талдау')}
+                      <ArrowRight size={16} />
+                    </Link>
+                  )}
+                  <Link className="text-button" to={`/attempts?season_id=${season.id}`}>
+                    {t('История тестов по теме', 'Тақырып тесттерінің тарихы')}
+                  </Link>
+                </div>
+              )}
             </section>
 
             <section className="topic-episodes" aria-label={t('Серии темы', 'Тақырып сериялары')}>
