@@ -1,0 +1,264 @@
+.status.moderation {
+  background: #87b8e81c;
+  color: #a8cce8;
+}
+.status.rejected {
+  background: #f19c8a1a;
+  color: #f2ada3;
+}
+.trust-note {
+  margin: 0 0 24px;
+}
+.style-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+}
+.style-picker label {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.style-picker label.active {
+  border-color: var(--mint);
+  background: #c1f17d0d;
+}
+.style-picker input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.style-picker label:focus-within {
+  outline: 2px solid var(--mint);
+}
+.style-picker b {
+  font-size: 13px;
+}
+.style-picker small {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.style-advice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+  color: #c9d3c4;
+}
+.style-advice svg {
+  flex-shrink: 0;
+  color: var(--mint);
+  margin-top: 2px;
+}
+.style-advice p {
+  font-size: 12px !important;
+  line-height: 1.6;
+}
+.voice-input {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+.voice-input .status {
+  justify-self: start;
+}
+.voice-input audio {
+  width: 100%;
+  height: 36px;
+}
+.voice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.moderation-status {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.moderation-status > svg {
+  flex-shrink: 0;
+  color: #a8cce8;
+}
+.moderation-status.rejected > svg {
+  color: #f2ada3;
+}
+.moderation-status h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.moderation-status p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.moderator-note {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f19c8a12;
+}
+.flag-list {
+  margin-bottom: 18px;
+}
+.flag-list h3 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.flag-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.flag-list li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 3px solid #c3b885;
+  background: #ffffff06;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.flag-list li.block {
+  border-left-color: #f2ada3;
+}
+.flag-list small {
+  color: var(--muted);
+}
+.flag-list q {
+  color: #d8dccf;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.table-wrap {
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.stats-table th,
+.stats-table td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.stats-table th {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.stats-table td:first-child {
+  white-space: normal;
+  min-width: 200px;
+}
+.stats-table a {
+  color: inherit;
+}
+.stats-table tr.best td {
+  color: var(--mint);
+}
+.moderation-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.moderation-item {
+  text-align: left;
+  color: inherit;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.moderation-item h3 {
+  margin: 4px 0 0;
+}
+.moderation-item p {
+  margin: 0;
+}
+.moderation-item .status {
+  justify-self: start;
+}
+.review-content {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+}
+.review-episode {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.review-episode h4 {
+  margin: 0 0 6px;
+}
+.review-episode p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.review-episode .preview-video {
+  max-height: 420px;
+  margin-top: 10px;
+}
+.review-questions {
+  display: grid;
+  gap: 10px;
+  padding-left: 20px;
+  margin: 0;
+}
+.review-questions li {
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+}
+.review-questions span {
+  color: var(--mint);
+}
+.moderation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.danger-button {
+  color: #f2ada3;
+}
+.feed-actions > button > .action-liked {
+  background: #f19c8a24;
+  color: #f2ada3;
+}
+@media (max-width: 760px) {
+  .style-picker {
+    grid-template-columns: 1fr;
+  }
+}
+.video-report {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: #ffffffb3;
+  text-shadow: 0 1px 3px #000;
+}
+.video-report:hover {
+  color: #fff;
+}

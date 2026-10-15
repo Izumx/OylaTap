@@ -13,17 +13,22 @@ import {
   auth,
   required,
   teacher,
+  author,
   hashPassword,
   verifyPassword,
   createSession,
   cookieToken,
   tokenHash,
 } from './auth.js';
-import { dataDir, renderSeason } from './render.js';
+import { dataDir, renderSeason, ttsAvailable } from './render.js';
 import { dailyRouter } from './daily.js';
 import { assessmentsRouter } from './assessments.js';
 import { reportsRouter } from './reports.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
+import { curriculumRouter, subjectSchema } from './curriculum.js';
+import { moderationRouter, checkRules, seasonText, decide, addAiReview } from './moderation.js';
+import { analyticsRouter, styleInsights } from './analytics.js';
+import { recommendRouter } from './recommend.js';
 
 const app = express();
 const exec = promisify(execFile);
@@ -82,8 +87,9 @@ app.use('/api/auth', (req, res, next) => {
   if (limitMap.size > 10000) for (const [k, v] of limitMap) if (v.until < now) limitMap.delete(k);
   next();
 });
+// Public seasons hidden by complaints leave the shared feed but stay with assigned classes.
 const visibilitySql =
-  "(s.visibility='public' OR s.owner_id=$1 OR EXISTS(SELECT 1 FROM assignments av JOIN memberships mv ON mv.class_id=av.class_id WHERE av.season_id=s.id AND mv.user_id=$1))";
+  "((s.visibility='public' AND NOT s.hidden) OR s.owner_id=$1 OR EXISTS(SELECT 1 FROM assignments av JOIN memberships mv ON mv.class_id=av.class_id WHERE av.season_id=s.id AND mv.user_id=$1))";
 const publicUser = (u: any) => ({
   id: u.id,
   name: u.name,
@@ -91,21 +97,38 @@ const publicUser = (u: any) => ({
   role: u.role,
   grade: u.grade,
   language: u.language,
+  trust_level: u.trust_level,
+  is_moderator: u.is_moderator,
 });
 app.use('/api', dailyRouter(visibilitySql));
 app.use('/api', assessmentsRouter(visibilitySql));
+app.use('/api', curriculumRouter());
+app.use('/api', moderationRouter(visibilitySql));
+app.use('/api', analyticsRouter(visibilitySql));
+app.use('/api', recommendRouter(visibilitySql));
 app.get('/api/health', async (req, res) => {
   await db.query('SELECT 1');
   res.json({ ok: true, database: 'PostgreSQL' });
 });
 app.get('/api/me', (req, res) => res.json({ user: req.user || null, demo }));
-app.get('/api/ai/status', required, teacher, (req, res) => res.json({ draft_enabled: aiEnabled }));
-app.post('/api/material/draft', required, teacher, async (req, res) => {
+app.get('/api/ai/status', required, author, (req, res) =>
+  res.json({
+    draft_enabled: aiEnabled,
+    review_enabled: aiEnabled,
+    tts: { ru: ttsAvailable('ru'), kk: ttsAvailable('kk') },
+  }),
+);
+app.post('/api/material/draft', required, author, async (req, res) => {
   if (!aiEnabled)
     throw new HttpError(503, 'Локальный ИИ не подключён. Можно редактировать сценарий вручную.');
   const input = materialSchema.parse(req.body);
   try {
-    res.json(await generateDraft(input));
+    res.json(
+      await generateDraft(
+        input,
+        (await styleInsights()).hints.map((h) => h.en),
+      ),
+    );
   } catch (error) {
     throw new HttpError(
       502,
@@ -119,7 +142,7 @@ app.post('/api/material/draft', required, teacher, async (req, res) => {
 });
 app.post('/api/auth/demo', async (req, res) => {
   if (!demo) notFound();
-  const { role } = z.object({ role: z.enum(['student', 'teacher']) }).parse(req.body);
+  const { role } = z.object({ role: z.enum(['student', 'teacher', 'creator']) }).parse(req.body);
   const user = await one('SELECT * FROM users WHERE email=$1', [`${role}@demo.oylatap.local`]);
   if (!user) throw new HttpError(503, 'Демонстрационные данные ещё не подготовлены');
   await createSession(res, user.id);
@@ -137,7 +160,7 @@ app.post('/api/auth/register', async (req, res) => {
   const data = accountSchema
     .extend({
       name: z.string().trim().min(2).max(80),
-      role: z.enum(['student', 'teacher']),
+      role: z.enum(['student', 'teacher', 'creator']),
       grade: z.number().int().min(5).max(11).default(7),
     })
     .parse(req.body);
@@ -182,6 +205,7 @@ app.patch('/api/profile', required, async (req, res) => {
   res.json({ user: publicUser(u) });
 });
 const catalogSql = `SELECT s.id,s.title,s.description,s.subject,s.language,s.grade,s.color,s.art,s.status,s.created_at,s.source_name,
+ s.style,s.voice,s.topic_id,s.hidden,s.moderation_note,(SELECT name FROM users WHERE id=s.owner_id) owner_name,
  (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
  (SELECT coalesce(sum(duration),0)::int FROM episodes e WHERE e.season_id=s.id) duration,
  (SELECT count(*)::int FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) completed,
@@ -200,7 +224,7 @@ app.get('/api/catalog', async (req, res) =>
     ),
   ),
 );
-app.get('/api/my-seasons', required, teacher, async (req, res) =>
+app.get('/api/my-seasons', required, author, async (req, res) =>
   res.json(
     await rows(catalogSql + ' WHERE s.owner_id=$2 ORDER BY s.created_at DESC', [
       req.user!.id,
@@ -210,11 +234,19 @@ app.get('/api/my-seasons', required, teacher, async (req, res) =>
 );
 app.get('/api/seasons/:id', async (req, res) => {
   const id = uid.parse(req.params.id);
-  const s = await one('SELECT * FROM seasons WHERE id=$1', [id]);
-  if (!s || (s.status !== 'published' && s.owner_id !== req.user?.id)) notFound();
-  const owner = s.owner_id === req.user?.id;
+  const s = await one(
+    `SELECT s.*,u.name owner_name,u.role owner_role,u.trust_level owner_trust,
+     t.title_ru topic_title_ru,t.title_kk topic_title_kk
+     FROM seasons s JOIN users u ON u.id=s.owner_id LEFT JOIN curriculum_topics t ON t.id=s.topic_id WHERE s.id=$1`,
+    [id],
+  );
+  // Moderators inspect any season, including answers, before it reaches learners.
+  const inspector = Boolean(req.user?.is_moderator);
+  if (!s || (s.status !== 'published' && s.owner_id !== req.user?.id && !inspector)) notFound();
+  const owner = s.owner_id === req.user?.id || inspector;
   if (
     s.status === 'published' &&
+    !inspector &&
     !(await one('SELECT s.id FROM seasons s WHERE s.id=$2 AND ' + visibilitySql, [
       req.user?.id || null,
       id,
@@ -223,7 +255,10 @@ app.get('/api/seasons/:id', async (req, res) => {
     notFound();
   const episodes = await rows(
     `SELECT e.id,e.position,e.title,e.script,e.duration,(media_path IS NOT NULL) has_video,
-    EXISTS(SELECT 1 FROM completions c WHERE c.episode_id=e.id AND c.user_id=$2) completed
+    (voice_path IS NOT NULL) has_voice,media_kind,
+    EXISTS(SELECT 1 FROM completions c WHERE c.episode_id=e.id AND c.user_id=$2) completed,
+    (SELECT count(*)::int FROM episode_likes l WHERE l.episode_id=e.id) likes,
+    EXISTS(SELECT 1 FROM episode_likes l WHERE l.episode_id=e.id AND l.user_id=$2) liked
     FROM episodes e WHERE season_id=$1 ORDER BY position`,
     [id, req.user?.id || null],
   );
@@ -246,6 +281,14 @@ app.get('/api/seasons/:id', async (req, res) => {
   res.json({
     ...s,
     source_text: owner ? s.source_text : undefined,
+    moderation_flags: owner ? s.moderation_flags : undefined,
+    moderation_note: owner ? s.moderation_note : undefined,
+    moderation_history: owner
+      ? await rows(
+          'SELECT decision,note,created_at FROM moderation_decisions WHERE season_id=$1 ORDER BY created_at DESC',
+          [id],
+        )
+      : undefined,
     episodes,
     questions: owner
       ? questions
@@ -259,11 +302,13 @@ app.get('/api/seasons/:id', async (req, res) => {
 });
 app.get('/api/episodes/:id/video', async (req, res) => {
   const ep = await one(
-    `SELECT e.media_path,s.status,s.owner_id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND ((s.status='published' AND ${visibilitySql}) OR s.owner_id=$1)`,
-    [req.user?.id || null, uid.parse(req.params.id)],
+    `SELECT e.media_path,e.title,s.status,s.owner_id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND ((s.status='published' AND ${visibilitySql}) OR s.owner_id=$1 OR $3)`,
+    [req.user?.id || null, uid.parse(req.params.id), Boolean(req.user?.is_moderator)],
   );
-  if (!ep || !ep.media_path || (ep.status !== 'published' && ep.owner_id !== req.user?.id))
-    notFound();
+  if (!ep || !ep.media_path) notFound();
+  // Authors download their own cut to post on TikTok or Reels with the OylaTap signature.
+  if (req.query.download === '1' && ep.owner_id === req.user?.id)
+    res.attachment(`${ep.title.replace(/[^\p{L}\d]+/gu, '-').slice(0, 60) || 'oylatap'}.mp4`);
   res.type('video/mp4').sendFile(ep.media_path, { dotfiles: 'allow' });
 });
 app.post('/api/episodes/:id/complete', required, async (req, res) => {
@@ -380,7 +425,7 @@ app.post('/api/assignments', required, teacher, async (req, res) => {
     notFound();
   if (
     !(await one(
-      "SELECT id FROM seasons WHERE id=$1 AND status='published' AND (visibility='public' OR owner_id=$2)",
+      "SELECT id FROM seasons WHERE id=$1 AND status='published' AND ((visibility='public' AND NOT hidden) OR owner_id=$2)",
       [d.season_id, req.user!.id],
     ))
   )
@@ -395,9 +440,12 @@ const seasonData = z
   .object({
     title: z.string().trim().min(3).max(100),
     description: z.string().trim().min(5).max(500),
-    subject: z.enum(['kz-history', 'world-history', 'kz-literature', 'ru-literature']),
+    subject: subjectSchema,
     language: z.enum(['ru', 'kk']),
     grade: z.number().int().min(5).max(11),
+    style: z.enum(['cards', 'board', 'captions']).default('cards'),
+    voice: z.enum(['none', 'tts', 'own']).default('none'),
+    topic_id: uid.nullable().default(null),
     source_text: z.string().max(60000),
     source_name: z.string().max(200).default('Материал учителя'),
     episodes: z
@@ -405,7 +453,7 @@ const seasonData = z
         z.object({
           id: uid.optional(),
           title: z.string().trim().min(2).max(100),
-          script: z.string().trim().min(10).max(500),
+          script: z.string().trim().min(10).max(700),
         }),
       )
       .min(1)
@@ -458,18 +506,29 @@ async function saveSeason(
   id: string = randomUUID(),
   existing = false,
 ) {
+  if (
+    data.topic_id &&
+    !(await one('SELECT id FROM curriculum_topics WHERE id=$1 AND subject=$2', [
+      data.topic_id,
+      data.subject,
+    ]))
+  )
+    fail('Тема программы не относится к выбранному предмету');
   const c = await db.connect();
   try {
     await c.query('BEGIN');
+    // A new visual style or narration means every generated video must be rebuilt.
+    let restyled = false;
     if (existing) {
       const locked = await c.query(
-        'SELECT status FROM seasons WHERE id=$1 AND owner_id=$2 FOR UPDATE',
+        'SELECT status,style,voice FROM seasons WHERE id=$1 AND owner_id=$2 FOR UPDATE',
         [id, userId],
       );
       if (!locked.rows[0] || ['published', 'rendering'].includes(locked.rows[0].status))
         throw new HttpError(409, 'Опубликованный или собирающийся сезон нельзя редактировать');
+      restyled = locked.rows[0].style !== data.style || locked.rows[0].voice !== data.voice;
       await c.query(
-        "UPDATE seasons SET title=$2,description=$3,subject=$4,language=$5,grade=$6,source_text=$7,source_name=$8,status='draft',render_error=NULL,updated_at=now() WHERE id=$1",
+        "UPDATE seasons SET title=$2,description=$3,subject=$4,language=$5,grade=$6,source_text=$7,source_name=$8,style=$9,voice=$10,topic_id=$11,status='draft',render_error=NULL,updated_at=now() WHERE id=$1",
         [
           id,
           data.title,
@@ -479,11 +538,14 @@ async function saveSeason(
           data.grade,
           data.source_text,
           data.source_name,
+          data.style,
+          data.voice,
+          data.topic_id,
         ],
       );
     } else
       await c.query(
-        'INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,source_text,source_name,color,art) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+        'INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,source_text,source_name,color,art,style,voice,topic_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
         [
           id,
           userId,
@@ -500,8 +562,17 @@ async function saveSeason(
               ? 'lilac'
               : data.subject === 'world-history'
                 ? 'blue'
-                : 'sage',
-          data.subject.includes('literature') ? 'book' : 'history',
+                : ['algebra', 'geometry'].includes(data.subject)
+                  ? 'slate'
+                  : 'sage',
+          data.subject.includes('literature')
+            ? 'book'
+            : ['algebra', 'geometry'].includes(data.subject)
+              ? 'math'
+              : 'history',
+          data.style,
+          data.voice,
+          data.topic_id,
         ],
       );
     const episodeIds: string[] = [];
@@ -512,9 +583,12 @@ async function saveSeason(
       const old = previous.find((x) => x.id === e.id);
       const episodeId = old ? e.id! : randomUUID();
       episodeIds.push(episodeId);
-      const keep = old && old.title === e.title && old.script === e.script;
+      const keep =
+        old &&
+        (old.media_kind === 'uploaded' ||
+          (!restyled && old.title === e.title && old.script === e.script));
       await c.query(
-        'INSERT INTO episodes(id,season_id,position,title,script,media_path,duration) VALUES($1,$2,$3,$4,$5,$6,$7)',
+        'INSERT INTO episodes(id,season_id,position,title,script,media_path,duration,voice_path,media_kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
         [
           episodeId,
           id,
@@ -523,6 +597,8 @@ async function saveSeason(
           e.script,
           keep ? old.media_path : null,
           keep ? old.duration : 60,
+          old?.voice_path || null,
+          keep ? old.media_kind : 'rendered',
         ],
       );
     }
@@ -550,16 +626,16 @@ async function saveSeason(
     c.release();
   }
 }
-app.post('/api/seasons', required, teacher, async (req, res) =>
+app.post('/api/seasons', required, author, async (req, res) =>
   res.status(201).json(await saveSeason(req.user!.id, seasonData.parse(req.body))),
 );
-app.put('/api/seasons/:id', required, teacher, async (req, res) => {
+app.put('/api/seasons/:id', required, author, async (req, res) => {
   await owned(req);
   res.json(
     await saveSeason(req.user!.id, seasonData.parse(req.body), uid.parse(req.params.id), true),
   );
 });
-app.post('/api/material/extract', required, teacher, upload.single('file'), async (req, res) => {
+app.post('/api/material/extract', required, author, upload.single('file'), async (req, res) => {
   if (!req.file) fail('Выберите PDF или текстовый файл');
   if (req.file!.size > 10 * 1024 * 1024) fail('Материал должен быть не больше 10 МБ');
   const ext = extname(req.file!.originalname).toLowerCase();
@@ -579,17 +655,17 @@ app.post('/api/material/extract', required, teacher, upload.single('file'), asyn
   if (text.length > 60000) fail('Материал слишком большой. Выберите фрагмент до 60 000 символов.');
   res.json({ text, name: req.file!.originalname });
 });
-app.post('/api/seasons/:id/render', required, teacher, async (req, res) => {
+app.post('/api/seasons/:id/render', required, author, async (req, res) => {
   await owned(req);
   const updated = await db.query(
-    "UPDATE seasons SET status='rendering',render_error=NULL WHERE id=$1 AND status IN ('draft','review','failed') RETURNING id",
+    "UPDATE seasons SET status='rendering',render_error=NULL WHERE id=$1 AND status IN ('draft','review','failed','rejected') RETURNING id",
     [req.params.id],
   );
   if (!updated.rowCount) throw new HttpError(409, 'Сезон уже собирается или опубликован');
   void renderSeason(String(req.params.id));
   res.status(202).json({ ok: true });
 });
-app.post('/api/seasons/:id/publish', required, teacher, async (req, res) => {
+app.post('/api/seasons/:id/publish', required, author, async (req, res) => {
   await owned(req);
   const d = z
     .object({
@@ -597,12 +673,31 @@ app.post('/api/seasons/:id/publish', required, teacher, async (req, res) => {
       visibility: z.enum(['public', 'class']).default('class'),
     })
     .parse(req.body);
+  // Independent authors have no classes: their work is for the shared feed.
+  const visibility = req.user!.role === 'creator' ? 'public' : d.visibility;
+  const flags = checkRules(await seasonText(String(req.params.id)));
+  const blocking = flags.filter((f) => f.severity === 'block');
+  if (blocking.length) {
+    await db.query('UPDATE seasons SET moderation_flags=$2 WHERE id=$1', [
+      req.params.id,
+      JSON.stringify(flags),
+    ]);
+    fail(
+      'Публикация невозможна: ' +
+        [...new Set(blocking.map((f) => `${f.message} (${f.field})`))].join('; '),
+    );
+  }
+  // A class audience is the teacher's responsibility. The shared feed needs a moderator
+  // until the author has earned trust, and always when the rules found something.
+  const direct = visibility === 'class' || (req.user!.trust_level === 'trusted' && !flags.length);
+  let status = 'published';
   const c = await db.connect();
   try {
     await c.query('BEGIN');
     const s = (await c.query('SELECT * FROM seasons WHERE id=$1 FOR UPDATE', [req.params.id]))
       .rows[0];
-    if (!['draft', 'review'].includes(s.status)) fail('Сезон ещё не готов к публикации');
+    if (!['draft', 'review', 'rejected'].includes(s.status))
+      fail('Сезон ещё не готов к публикации');
     if (
       (await c.query('SELECT 1 FROM episodes WHERE season_id=$1 AND media_path IS NULL', [s.id]))
         .rowCount
@@ -633,9 +728,11 @@ app.post('/api/seasons/:id/publish', required, teacher, async (req, res) => {
       ).rowCount
     )
       fail('Итоговый вопрос должен отличаться от микровопроса');
+    status = direct ? 'published' : 'moderation';
     await c.query(
-      "UPDATE seasons SET status='published',visibility=$2,updated_at=now() WHERE id=$1",
-      [s.id, d.visibility],
+      `UPDATE seasons SET status=$3,visibility=$2,moderation_flags=$4,moderation_note=NULL,
+       published_at=CASE WHEN $3='published' THEN coalesce(published_at,now()) END,updated_at=now() WHERE id=$1`,
+      [s.id, visibility, status, JSON.stringify(flags)],
     );
     await c.query('COMMIT');
   } catch (e) {
@@ -644,12 +741,17 @@ app.post('/api/seasons/:id/publish', required, teacher, async (req, res) => {
   } finally {
     c.release();
   }
-  res.json({ ok: d.confirmed });
+  const id = String(req.params.id);
+  if (visibility === 'public')
+    await decide(id, status === 'published' ? 'auto_published' : 'submitted');
+  if (status === 'moderation')
+    void addAiReview(id, (await one('SELECT language FROM seasons WHERE id=$1', [id])).language);
+  res.json({ ok: d.confirmed, status, flags });
 });
 app.post(
   '/api/seasons/:id/episodes/:episodeId/video',
   required,
-  teacher,
+  author,
   async (req, res, next) => {
     const s = await owned(req);
     if (['published', 'rendering'].includes(s.status))
@@ -691,12 +793,10 @@ app.post(
       const duration = Math.ceil(Number(meta.format.duration));
       if (!Number.isFinite(duration) || duration < 1 || duration > 180)
         fail('Серия должна длиться от 1 до 180 секунд');
-      await db.query('UPDATE episodes SET media_path=$1,duration=$2 WHERE id=$3 AND season_id=$4', [
-        path,
-        duration,
-        req.params.episodeId,
-        req.params.id,
-      ]);
+      await db.query(
+        "UPDATE episodes SET media_path=$1,duration=$2,media_kind='uploaded' WHERE id=$3 AND season_id=$4",
+        [path, duration, req.params.episodeId, req.params.id],
+      );
     } catch (e) {
       await unlink(path).catch(() => {});
       throw e instanceof HttpError ? e : new HttpError(400, 'Файл не удалось прочитать как видео');
@@ -704,6 +804,62 @@ app.post(
     res.json({ ok: true });
   },
 );
+app.post(
+  '/api/seasons/:id/episodes/:episodeId/voice',
+  required,
+  author,
+  async (req, res, next) => {
+    const s = await owned(req);
+    if (['published', 'rendering', 'moderation'].includes(s.status))
+      throw new HttpError(409, 'Запись голоса доступна в черновике');
+    if (
+      !(await one('SELECT id FROM episodes WHERE id=$1 AND season_id=$2', [
+        uid.parse(req.params.episodeId),
+        s.id,
+      ]))
+    )
+      notFound();
+    next();
+  },
+  upload.single('file'),
+  async (req, res) => {
+    if (!req.file) fail('Добавьте запись голоса');
+    if (req.file!.size > 20 * 1024 * 1024) fail('Запись должна быть не больше 20 МБ');
+    await mkdir(dataDir, { recursive: true });
+    const path = resolve(dataDir, `${randomUUID()}.voice`);
+    await writeFile(path, req.file!.buffer);
+    try {
+      const p = await exec(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', path],
+        { timeout: 15000 },
+      );
+      const meta = JSON.parse(p.stdout);
+      if (!meta.streams?.some((x: any) => x.codec_type === 'audio'))
+        fail('В файле нет звуковой дорожки');
+      const duration = Number(meta.format?.duration);
+      if (!(duration >= 1 && duration <= 180)) fail('Голос серии: от 1 секунды до 3 минут');
+      const old = await one(
+        `UPDATE episodes e SET voice_path=$1,media_path=CASE WHEN e.media_kind='uploaded' THEN e.media_path END
+         FROM episodes prev WHERE prev.id=e.id AND e.id=$2 AND e.season_id=$3 RETURNING prev.voice_path`,
+        [path, req.params.episodeId, req.params.id],
+      );
+      if (old?.voice_path) await unlink(old.voice_path).catch(() => {});
+    } catch (e) {
+      await unlink(path).catch(() => {});
+      throw e instanceof HttpError ? e : new HttpError(400, 'Файл не удалось прочитать как звук');
+    }
+    res.json({ ok: true });
+  },
+);
+app.get('/api/episodes/:id/voice', required, author, async (req, res) => {
+  const ep = await one(
+    'SELECT e.voice_path FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE e.id=$1 AND s.owner_id=$2',
+    [uid.parse(req.params.id), req.user!.id],
+  );
+  if (!ep?.voice_path) notFound();
+  res.sendFile(ep.voice_path, { dotfiles: 'allow' });
+});
 app.post(
   '/api/seasons/:id/retellings',
   required,
@@ -821,6 +977,12 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
       episodes: 'Серии',
       questions: 'Вопросы',
       due_at: 'Срок',
+      style: 'Стиль видео',
+      voice: 'Озвучка',
+      topic_id: 'Тема программы',
+      reason: 'Причина',
+      comment: 'Комментарий',
+      note: 'Комментарий модератора',
     };
     const messages = error.issues.map((x: any) => {
       const field = names[String(x.path.at(-1))] || names[String(x.path[0])] || 'Поле';

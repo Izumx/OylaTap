@@ -1,11 +1,32 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import sharp from 'sharp';
-import { db, rows } from './db.js';
+import { db, rows, one } from './db.js';
 const exec = promisify(execFile);
 export const dataDir = resolve(process.env.DATA_DIR || '.local/uploads');
+export type VideoStyle = 'cards' | 'board' | 'captions';
+export type Voice = 'none' | 'tts' | 'own';
+type Episode = {
+  id: string;
+  title: string;
+  script: string;
+  position: number;
+  voice_path?: string | null;
+};
+type Options = {
+  color?: string;
+  style?: VideoStyle;
+  voice?: Voice;
+  language?: string;
+  author?: string;
+};
+const W = 720,
+  H = 1280;
+// DejaVu ships with Linux servers; Segoe UI, Arial and Consolas cover Cyrillic on Windows.
+const SANS = 'DejaVu Sans, Segoe UI, Arial, sans-serif';
+const MONO = 'DejaVu Sans Mono, Consolas, Courier New, monospace';
 const xml = (s: string) =>
   s.replace(
     /[<>&"']/g,
@@ -23,78 +44,309 @@ function wrap(text: string, width = 27) {
   if (line) lines.push(line);
   return lines;
 }
-export async function renderEpisode(
-  episode: { id: string; title: string; script: string; position: number },
-  color = 'sage',
-) {
-  await mkdir(dataDir, { recursive: true });
-  const titleLines = wrap(episode.title, 21).slice(0, 4);
-  const bodyLines = wrap(episode.script, 31);
+const palette: Record<string, string> = {
+  sage: '#215b48',
+  peach: '#9b4d33',
+  lilac: '#55497a',
+  blue: '#305f7a',
+  slate: '#2f3b52',
+};
+
+// One step = one thought on screen. Authors control steps with line breaks;
+// otherwise sentences become steps. Formulas go in backticks or on their own line with "=".
+export function splitSteps(script: string) {
+  const raw = script
+    .split(/\n+/)
+    .flatMap((line) => line.split(/(?<=[.!?…])\s+(?=[\p{Lu}\d`(«"])/u))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const steps: string[] = [];
+  for (const piece of raw) {
+    const last = steps.at(-1);
+    if (last && last.length < 18 && !isFormula(last) && !isFormula(piece))
+      steps[steps.length - 1] = `${last} ${piece}`;
+    else steps.push(piece);
+  }
+  while (steps.length > 8) {
+    const i = steps.reduce(
+      (best, s, n) =>
+        n < steps.length - 1 && s.length + steps[n + 1].length < best.len
+          ? { i: n, len: s.length + steps[n + 1].length }
+          : best,
+      { i: 0, len: Infinity },
+    ).i;
+    steps.splice(i, 2, `${steps[i]} ${steps[i + 1]}`);
+  }
+  return steps.length ? steps : [script.trim()];
+}
+const isFormula = (s: string) => /^`.*`$/.test(s.trim()) || /^[^\p{L}]*=|\s=\s/u.test(s);
+const plain = (s: string) => s.replace(/`/g, '');
+const words = (s: string) => Math.max(1, plain(s).split(/\s+/).filter(Boolean).length);
+
+function footer(author: string | undefined, fill: string) {
+  return `<text x="56" y="${H - 56}" font-size="24" fill="${fill}" opacity=".75">${xml(
+    author ? `@${author.replace(/\s+/g, '_').slice(0, 30)} · oylatap` : 'oylatap',
+  )}</text>`;
+}
+
+function cardsFrame(ep: Episode, bg: string, author?: string) {
+  const titleLines = wrap(ep.title, 21).slice(0, 4);
+  const bodyLines = wrap(plain(ep.script), 31);
   if (bodyLines.length > 18)
     throw new Error('Сократите текст серии до 500 символов для читаемых субтитров.');
-  const palette: Record<string, string> = {
-    sage: '#215b48',
-    peach: '#9b4d33',
-    lilac: '#55497a',
-    blue: '#305f7a',
-  };
-  const bg = palette[color] || palette.sage;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280"><rect width="720" height="1280" fill="${bg}"/><circle cx="620" cy="120" r="220" fill="white" opacity=".06"/><circle cx="20" cy="1180" r="290" fill="white" opacity=".04"/><g font-family="DejaVu Sans, sans-serif" fill="#f8f5e9">${titleLines.map((line, i) => `<text x="56" y="${190 + i * 58}" font-size="44" font-weight="bold">${xml(line)}</text>`).join('')}<rect x="56" y="${215 + titleLines.length * 58}" width="80" height="6" rx="3" fill="#bce8a3"/>${bodyLines.map((line, i) => `<text x="56" y="${310 + titleLines.length * 58 + i * 35}" font-size="28">${xml(line)}</text>`).join('')}</g></svg>`;
-  const png = resolve(dataDir, `${episode.id}.png`);
-  const mp4 = resolve(dataDir, `${episode.id}.mp4`);
-  await sharp(Buffer.from(svg)).png().toFile(png);
-  const duration = Math.min(45, Math.max(12, Math.ceil(episode.script.split(/\s+/).length / 2.5)));
-  await exec(
-    'ffmpeg',
-    [
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-loop',
-      '1',
-      '-i',
-      png,
-      '-t',
-      String(duration),
-      '-vf',
-      'scale=540:960,format=yuv420p',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'ultrafast',
-      '-threads',
-      '2',
-      '-r',
-      '12',
-      '-movflags',
-      '+faststart',
-      mp4,
-    ],
-    { timeout: 120000 },
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${bg}"/><circle cx="620" cy="120" r="220" fill="white" opacity=".06"/><circle cx="20" cy="1180" r="290" fill="white" opacity=".04"/><g font-family="${SANS}" fill="#f8f5e9">${titleLines.map((line, i) => `<text x="56" y="${190 + i * 58}" font-size="44" font-weight="bold">${xml(line)}</text>`).join('')}<rect x="56" y="${215 + titleLines.length * 58}" width="80" height="6" rx="3" fill="#bce8a3"/>${bodyLines.map((line, i) => `<text x="56" y="${310 + titleLines.length * 58 + i * 35}" font-size="28">${xml(line)}</text>`).join('')}${footer(author, '#f8f5e9')}</g></svg>`;
+}
+
+// Chalkboard: steps accumulate; the newest is bright, earlier ones dim. When the board
+// is full the oldest steps scroll away, as a teacher would wipe the top of the board.
+function boardFrame(ep: Episode, steps: string[], upto: number, author?: string) {
+  const titleLines = wrap(ep.title, 26).slice(0, 3);
+  const top = 150 + titleLines.length * 52 + 50;
+  const bottom = H - 140;
+  const blocks = steps.slice(0, upto + 1).map((s, i) => {
+    const formula = isFormula(s);
+    // Formulas shrink before they wrap: a line break inside an expression misleads.
+    const length = plain(s).length;
+    const size = formula ? (length <= 22 ? 40 : length <= 28 ? 34 : 28) : 30;
+    const lines = wrap(plain(s), formula ? Math.floor(570 / (size * 0.6)) : 38);
+    const lh = Math.round(size * 1.3);
+    return { lines, formula, size, lh, newest: i === upto, height: lines.length * lh + 26 };
+  });
+  while (blocks.length > 1 && blocks.reduce((n, b) => n + b.height, 0) > bottom - top)
+    blocks.shift();
+  let y = top;
+  const body = blocks
+    .map((b) => {
+      const fill = b.formula
+        ? b.newest
+          ? '#ffd27a'
+          : '#c9b27f'
+        : b.newest
+          ? '#ffffff'
+          : '#a9c2b8';
+      const out = b.lines
+        .map((line, i) => {
+          const at = y + (i + 1) * b.lh;
+          return `<text x="${b.formula ? 84 : 64}" y="${at}" font-size="${b.size}" fill="${fill}"${b.formula ? ` font-family="${MONO}" font-weight="bold"` : ''}>${xml(line)}</text>`;
+        })
+        .join('');
+      const marker = b.newest
+        ? `<rect x="40" y="${y + 12}" width="6" height="${b.height - 30}" rx="3" fill="#ffd27a"/>`
+        : '';
+      y += b.height;
+      return marker + out;
+    })
+    .join('');
+  const dots = steps
+    .map(
+      (_, i) =>
+        `<circle cx="${W / 2 - (steps.length - 1) * 12 + i * 24}" cy="${H - 100}" r="6" fill="${i <= upto ? '#ffd27a' : '#4d6b60'}"/>`,
+    )
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#1d332d"/><rect x="24" y="24" width="${W - 48}" height="${H - 48}" rx="28" fill="#21403a" stroke="#3b5c52" stroke-width="4"/><g font-family="${SANS}">${titleLines.map((line, i) => `<text x="64" y="${150 + i * 52}" font-size="40" font-weight="bold" fill="#ffd27a">${xml(line)}</text>`).join('')}<rect x="64" y="${150 + titleLines.length * 52 - 20}" width="${W - 128}" height="3" fill="#3b5c52"/>${body}${dots}${footer(author, '#d9e6df')}</g></svg>`;
+}
+
+// Short-video captions: one phrase at a time, large and centred, with story-like progress.
+function captionsFrame(ep: Episode, steps: string[], at: number, bg: string, author?: string) {
+  const step = plain(steps[at]);
+  const size = step.length > 120 ? 40 : step.length > 70 ? 48 : 58;
+  const lines = wrap(step, Math.floor(600 / (size * 0.56))).slice(0, 10);
+  const lh = size * 1.25;
+  const y0 = H / 2 - (lines.length * lh) / 2 + size;
+  const bars = steps
+    .map((_, i) => {
+      const w = (W - 112 - (steps.length - 1) * 8) / steps.length;
+      return `<rect x="${56 + i * (w + 8)}" y="60" width="${w}" height="8" rx="4" fill="#ffffff" opacity="${i <= at ? 0.95 : 0.3}"/>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="#11151c"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/><circle cx="640" cy="260" r="260" fill="white" opacity=".05"/>${bars}<g font-family="${SANS}"><text x="56" y="130" font-size="28" fill="#ffffff" opacity=".8">${xml(wrap(ep.title, 40)[0])}</text>${lines.map((line, i) => `<text x="${W / 2}" y="${y0 + i * lh}" font-size="${size}" font-weight="bold" fill="${isFormula(steps[at]) ? '#ffd27a' : '#ffffff'}" text-anchor="middle"${isFormula(steps[at]) ? ` font-family="${MONO}"` : ''}>${xml(line)}</text>`).join('')}${footer(author, '#ffffff')}</g></svg>`;
+}
+
+async function probeDuration(path: string) {
+  const p = await exec(
+    'ffprobe',
+    ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', path],
+    { timeout: 15000 },
   );
-  await db.query('UPDATE episodes SET media_path=$1,duration=$2 WHERE id=$3', [
-    mp4,
-    duration,
-    episode.id,
-  ]);
+  const duration = Number(JSON.parse(p.stdout).format?.duration);
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error('Не удалось прочитать звук');
+  return duration;
+}
+
+// Local text-to-speech, e.g. Piper with a Russian or Kazakh voice. Configured on the server
+// as a JSON array: program, then arguments; {out} is the WAV path, text arrives on stdin.
+function ttsCommand(language: string): string[] | null {
+  const value = process.env[language === 'kk' ? 'TTS_COMMAND_KK' : 'TTS_COMMAND_RU'];
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') && parsed.length
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+export const ttsAvailable = (language: string) => Boolean(ttsCommand(language));
+async function synthesize(language: string, text: string, out: string) {
+  const command = ttsCommand(language);
+  if (!command) throw new Error('Озвучка для этого языка не настроена на сервере');
+  const [program, ...args] = command;
+  await new Promise<void>((done, fail) => {
+    const child = spawn(
+      program,
+      args.map((a) => a.replace('{out}', out)),
+      { stdio: ['pipe', 'ignore', 'pipe'] },
+    );
+    let errors = '';
+    const timer = setTimeout(() => child.kill(), 120000);
+    child.stderr.on('data', (d) => (errors = (errors + d).slice(-500)));
+    child.on('error', fail);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) done();
+      else fail(new Error(`TTS завершился с кодом ${code}: ${errors}`));
+    });
+    child.stdin.end(text);
+  });
+}
+
+export async function renderEpisode(episode: Episode, options: Options | string = {}) {
+  const o: Options = typeof options === 'string' ? { color: options } : options;
+  const style = o.style || 'cards',
+    bg = palette[o.color || 'sage'] || palette.sage;
+  await mkdir(dataDir, { recursive: true });
+  const work = resolve(dataDir, `render-${episode.id}`);
+  await rm(work, { recursive: true, force: true });
+  await mkdir(work, { recursive: true });
+  try {
+    const steps = style === 'cards' ? [episode.script] : splitSteps(episode.script);
+    // Narration decides the timing when present; otherwise reading speed does.
+    let audio: string | null = null;
+    if (o.voice === 'own' && episode.voice_path) audio = episode.voice_path;
+    if (o.voice === 'tts') {
+      audio = resolve(work, 'voice.wav');
+      await synthesize(
+        o.language || 'ru',
+        `${episode.title}. ${steps.map(plain).join(' ')}`,
+        audio,
+      );
+    }
+    // Synthesised narration starts with the title, which stays on the first frame.
+    const titleShare =
+      o.voice === 'tts' ? words(episode.title) / words(`${episode.title} ${episode.script}`) : 0;
+    const reading = steps.map((s) => Math.max(isFormula(s) ? 3 : 2.2, words(s) / 2.4));
+    let durations = reading;
+    if (audio) {
+      const total = await probeDuration(audio);
+      if (total > 180) throw new Error('Озвучка серии должна быть не длиннее 3 минут');
+      const weights = steps.map(words);
+      const sum = weights.reduce((a, b) => a + b, 0);
+      const spoken = total * (1 - titleShare);
+      durations = weights.map((w) => Math.max(1, (spoken * w) / sum));
+      durations[0] += total * titleShare;
+    } else if (style === 'cards')
+      durations = [Math.min(45, Math.max(12, Math.ceil(episode.script.split(/\s+/).length / 2.5)))];
+    const frames = steps.map((_, i) =>
+      style === 'board'
+        ? boardFrame(episode, steps, i, o.author)
+        : style === 'captions'
+          ? captionsFrame(episode, steps, i, bg, o.author)
+          : cardsFrame(episode, bg, o.author),
+    );
+    const list: string[] = [];
+    const pngs: string[] = [];
+    for (const [i, svg] of frames.entries()) {
+      const png = resolve(work, `frame-${i}.png`).replace(/\\/g, '/');
+      await sharp(Buffer.from(svg)).png().toFile(png);
+      pngs.push(png);
+      list.push(`file '${png.replace(/'/g, "'\\''")}'`, `duration ${durations[i].toFixed(2)}`);
+    }
+    // The concat demuxer needs the last frame repeated to honour its duration. A single
+    // still image is looped instead: concat would keep only one frame of it.
+    list.push(list.at(-2)!);
+    const listPath = resolve(work, 'frames.txt');
+    await writeFile(listPath, list.join('\n'));
+    const input =
+      pngs.length === 1
+        ? ['-loop', '1', '-i', pngs[0]]
+        : ['-f', 'concat', '-safe', '0', '-i', listPath];
+    const mp4 = resolve(dataDir, `${episode.id}.mp4`);
+    const total = durations.reduce((a, b) => a + b, 0);
+    await exec(
+      'ffmpeg',
+      [
+        '-y',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        ...input,
+        ...(audio ? ['-i', audio] : []),
+        '-vf',
+        'scale=540:960,format=yuv420p',
+        '-r',
+        '12',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'ultrafast',
+        '-tune',
+        'stillimage',
+        '-threads',
+        '2',
+        ...(audio ? ['-c:a', 'aac', '-b:a', '96k', '-ac', '1'] : []),
+        '-t',
+        total.toFixed(2),
+        '-movflags',
+        '+faststart',
+        mp4,
+      ],
+      { timeout: 180000 },
+    );
+    await db.query(
+      "UPDATE episodes SET media_path=$1,duration=$2,media_kind='rendered' WHERE id=$3",
+      [mp4, Math.max(1, Math.round(total)), episode.id],
+    );
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 }
 export async function renderSeason(id: string) {
   try {
-    const [season] = await rows('SELECT * FROM seasons WHERE id=$1', [id]);
-    for (const ep of await rows('SELECT * FROM episodes WHERE season_id=$1 ORDER BY position', [
-      id,
-    ]))
-      await renderEpisode(ep, season.color);
+    const season = await one(
+      'SELECT s.*,u.name owner_name FROM seasons s JOIN users u ON u.id=s.owner_id WHERE s.id=$1',
+      [id],
+    );
+    // Uploaded MP4s (for example from Google Flow) are the author's final cut; keep them.
+    for (const ep of await rows(
+      "SELECT * FROM episodes WHERE season_id=$1 AND NOT (media_kind='uploaded' AND media_path IS NOT NULL) ORDER BY position",
+      [id],
+    )) {
+      if (season.voice === 'own' && !ep.voice_path)
+        throw new Error(`Запишите голос для серии ${ep.position + 1}`);
+      await renderEpisode(ep, {
+        color: season.color,
+        style: season.style,
+        voice: season.voice,
+        language: season.language,
+        author: season.owner_name,
+      });
+    }
     await db.query(
       "UPDATE seasons SET status='review',render_error=NULL,updated_at=now() WHERE id=$1",
       [id],
     );
   } catch (error) {
-    console.error('Video rendering failed:', error instanceof Error ? error.message : 'unknown');
+    const message = error instanceof Error ? error.message : 'unknown';
+    console.error('Video rendering failed:', message);
     await db.query(
       "UPDATE seasons SET status='failed',render_error=$2,updated_at=now() WHERE id=$1",
-      [id, 'Не удалось собрать видео. Сценарий сохранён — можно повторить сборку.'],
+      [
+        id,
+        /^(Запишите|Сократите|Озвучка)/.test(message)
+          ? message
+          : 'Не удалось собрать видео. Сценарий сохранён — можно повторить сборку.',
+      ],
     );
   }
 }

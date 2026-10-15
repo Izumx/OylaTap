@@ -31,6 +31,8 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Moon,
+  Heart,
+  Flag,
 } from 'lucide-react';
 import {
   api,
@@ -47,7 +49,11 @@ import {
 import { Modal, State, PageHeader, SeasonArt, SeasonCard } from './components';
 import { LearningPreferences } from './Learning';
 
-type Clip = { season: Season; episode: Episode };
+type Clip = { season: Season; episode: Episode; reason?: string };
+type ForYou = {
+  week: number | null;
+  items: { season_id: string; episode_id: string; reason: string }[];
+};
 function MicroQuestion({
   episode,
   onClose,
@@ -154,7 +160,7 @@ export function Feed() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const startEpisode = Math.max(0, Number(searchParams.get('episode') || 0));
-  const [mode, setMode] = useState<'school' | 'free'>('school'),
+  const [mode, setMode] = useState<'school' | 'free' | 'foryou'>('school'),
     [focus, setFocus] = useState(() => localStorage.getItem('oylatap-feed-focus') !== 'off'),
     [today, setToday] = useState<DailySession | null>(null),
     [dailyStart, setDailyStart] = useState(0),
@@ -166,7 +172,7 @@ export function Feed() {
     [error, setError] = useState(''),
     [active, setActive] = useState(0),
     [muted, setMuted] = useState(true),
-    [modal, setModal] = useState<'quiz' | 'record' | 'chapters' | 'notes' | null>(null),
+    [modal, setModal] = useState<'quiz' | 'record' | 'chapters' | 'notes' | 'report' | null>(null),
     [version, setVersion] = useState(0);
   const scroll = useRef<HTMLDivElement>(null);
   const slideHeight = useRef(0);
@@ -180,6 +186,31 @@ export function Feed() {
     setLoading(true);
     setError('');
     (async () => {
+      if (!id && mode === 'foryou') {
+        // Several seasons, each with its next episodes, in the recommended order.
+        const picked = await api<ForYou>(`/foryou?language=${locale}`);
+        const seasons = new Map<string, Season>();
+        for (const item of picked.items)
+          if (!seasons.has(item.season_id))
+            seasons.set(item.season_id, await api<Season>(`/seasons/${item.season_id}`));
+        if (!alive) return;
+        setToday(null);
+        dailyRef.current = null;
+        setPassed(new Set());
+        setDailyStart(0);
+        setMicro(null);
+        setClips(
+          picked.items.flatMap((item) => {
+            const season = seasons.get(item.season_id)!;
+            const episode = season.episodes?.find((e) => e.id === item.episode_id);
+            return episode ? [{ season, episode, reason: item.reason }] : [];
+          }),
+        );
+        setActive(0);
+        activeSlide.current = 0;
+        scroll.current?.scrollTo(0, 0);
+        return;
+      }
       const daily = id ? null : await api<DailySession>(`/today?mode=${mode}`);
       const all: Season[] = id
         ? [await api(`/seasons/${id}`)]
@@ -219,7 +250,7 @@ export function Feed() {
       alive = false;
       feedGeneration.current += 1;
     };
-  }, [id, user?.id, version, mode]);
+  }, [id, user?.id, version, mode, locale]);
   const current = clips[Math.min(active, clips.length - 1)];
   const atEnd = active === clips.length;
   const sessionDone =
@@ -293,6 +324,25 @@ export function Feed() {
     window.addEventListener('keydown', fn);
     return () => window.removeEventListener('keydown', fn);
   }, [active, go]);
+  async function like(clip: Clip) {
+    if (!user) {
+      login();
+      return;
+    }
+    const liked = !clip.episode.liked;
+    try {
+      const v = await post(`/episodes/${clip.episode.id}/like`, { liked });
+      setClips((old) =>
+        old.map((c) =>
+          c.episode.id === clip.episode.id
+            ? { ...c, episode: { ...c.episode, liked: v.liked, likes: v.likes } }
+            : c,
+        ),
+      );
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  }
   const open = (kind: 'quiz' | 'record') => {
     if (!user) {
       login();
@@ -318,7 +368,8 @@ export function Feed() {
     }
   }
   const refreshDaily = useCallback(async () => {
-    if (!id && user?.id) {
+    // The personal selection has no daily plan to refresh.
+    if (!id && user?.id && mode !== 'foryou') {
       const generation = feedGeneration.current;
       try {
         const plan = await api<DailySession>(`/today?mode=${mode}`);
@@ -400,6 +451,15 @@ export function Feed() {
             {t('Сегодня', 'Бүгін')}
           </button>
           <button
+            className={!id && mode === 'foryou' ? 'active' : ''}
+            onClick={() => {
+              setMode('foryou');
+              if (id) navigate('/');
+            }}
+          >
+            {t('Для тебя', 'Саған')}
+          </button>
+          <button
             className={!id && mode === 'free' ? 'active' : ''}
             onClick={() => {
               setMode('free');
@@ -439,7 +499,11 @@ export function Feed() {
             <div className="player-column">
               <div className="feed-session-label">
                 <span className="live-dot" />
-                {id ? t('Твой сезон', 'Сенің маусымың') : sourceLabel}
+                {id
+                  ? t('Твой сезон', 'Сенің маусымың')
+                  : mode === 'foryou'
+                    ? t('Подобрано для тебя', 'Саған іріктелді')
+                    : sourceLabel}
                 <span>
                   {Math.min(active + 1, clips.length)} / {clips.length}
                 </span>
@@ -466,7 +530,7 @@ export function Feed() {
                   <div className="feed-slide" key={c.episode.id}>
                     <FeedVideo
                       clip={c}
-                      context={today ? sourceLabel : undefined}
+                      context={c.reason || (today ? sourceLabel : undefined)}
                       active={i === active && !modal && !micro && !authOpen}
                       muted={muted}
                       onEnded={() => {
@@ -476,6 +540,7 @@ export function Feed() {
                         });
                       }}
                       onQuiz={() => open('quiz')}
+                      onReport={() => (user ? setModal('report') : login())}
                     />
                   </div>
                 ))}
@@ -631,6 +696,16 @@ export function Feed() {
                   </span>
                   <small>{t('Пересказ', 'Мазмұндау')}</small>
                 </button>
+                <button
+                  onClick={() => current && void like(current)}
+                  aria-label={current?.episode.liked ? 'Убрать лайк' : 'Нравится объяснение'}
+                  aria-pressed={Boolean(current?.episode.liked)}
+                >
+                  <span className={current?.episode.liked ? 'action-liked' : ''}>
+                    <Heart size={23} fill={current?.episode.liked ? 'currentColor' : 'none'} />
+                  </span>
+                  <small>{current?.episode.likes || t('Нравится', 'Ұнайды')}</small>
+                </button>
                 <button onClick={() => void share()} aria-label="Поделиться сезоном">
                   <span>
                     <Share2 size={23} />
@@ -670,6 +745,7 @@ export function Feed() {
                     today?.topic_source === 'class' ? 'БҮГІН СЫНЫПТА' : 'БҮГІНГІ ТАҚЫРЫБЫҢ',
                   )}
                 </div>
+                {current.reason && <p className="daily-reason">{current.reason}</p>}
                 {today && (
                   <p className="daily-reason">
                     {sourceLabel}
@@ -756,10 +832,15 @@ export function Feed() {
                 <div className="demo-label">
                   {current.season.source_name.startsWith('Демонстрационные')
                     ? t(
-                        'Демонстрационный контент · без озвучки',
-                        'Демонстрациялық мазмұн · дыбыссыз',
+                        'Демонстрационный контент · требует проверки педагогом',
+                        'Демонстрациялық мазмұн · педагог тексеруі қажет',
                       )
-                    : t('Материал проверен учителем', 'Материалды мұғалім тексерді')}
+                    : current.season.owner_role === 'creator'
+                      ? t(
+                          'Автор платформы · проверено модератором',
+                          'Платформа авторы · модератор тексерген',
+                        )
+                      : t('Материал проверен учителем', 'Материалды мұғалім тексерді')}
                 </div>
               </aside>
             )}
@@ -808,6 +889,9 @@ export function Feed() {
             <ArrowRight size={18} />
           </button>
         </Modal>
+      )}
+      {current && modal === 'report' && (
+        <ReportModal clip={current} onClose={() => setModal(null)} />
       )}
       {current && modal === 'notes' && (
         <Modal title={current.episode.title} onClose={() => setModal(null)}>
@@ -859,6 +943,7 @@ function FeedVideo({
   muted,
   onEnded,
   onQuiz,
+  onReport,
 }: {
   clip: Clip;
   context?: string;
@@ -866,13 +951,26 @@ function FeedVideo({
   muted: boolean;
   onEnded: () => void;
   onQuiz: () => void;
+  onReport: () => void;
 }) {
-  const { t } = useApp();
+  const { t, user } = useApp();
   const ref = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false),
     [time, setTime] = useState(0),
     [duration, setDuration] = useState(0),
     [failed, setFailed] = useState(false);
+  // The furthest point watched; reported when the clip stops being the active one.
+  const watched = useRef({ max: 0, sent: 0 });
+  const report = useCallback(() => {
+    const w = watched.current;
+    if (!user || w.max - w.sent < 0.05) return;
+    w.sent = w.max;
+    void post(`/episodes/${clip.episode.id}/view`, { ratio: Math.min(1, w.max) }).catch(() => {});
+  }, [user, clip.episode.id]);
+  useEffect(() => {
+    if (!active) report();
+  }, [active, report]);
+  useEffect(() => report, [report]);
   const pct = duration ? (time / duration) * 100 : 0;
   const stamp = (seconds: number) =>
     `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -912,11 +1010,15 @@ function FeedVideo({
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           setTime(v.currentTime);
+          if (v.duration > 0)
+            watched.current.max = Math.max(watched.current.max, v.currentTime / v.duration);
         }}
         onLoadedMetadata={(e) =>
           setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)
         }
         onEnded={() => {
+          watched.current.max = 1;
+          report();
           onEnded();
           setPaused(true);
         }}
@@ -961,9 +1063,12 @@ function FeedVideo({
       <div className="video-bottom">
         {context && <p className="video-context">{context}</p>}
         <div className="creator">
-          <span className="creator-avatar">O</span>
+          <span className="creator-avatar">{(clip.season.owner_name || 'O').slice(0, 1)}</span>
           <span>
-            OylaTap <CheckCheck size={16} />
+            {clip.season.source_name?.startsWith('Демонстрационные')
+              ? 'OylaTap'
+              : clip.season.owner_name || 'OylaTap'}{' '}
+            {clip.season.owner_trust === 'trusted' && <CheckCheck size={16} />}
           </span>
           <span className="video-language">
             {clip.season.language === 'kk' ? 'Қазақша' : 'Русский'}
@@ -974,6 +1079,10 @@ function FeedVideo({
           <BookOpen size={14} />
           {clip.season.title}
         </Link>
+        <button className="video-report" onClick={onReport} aria-label="Сообщить об ошибке">
+          <Flag size={13} />
+          {t('Нашёл ошибку?', 'Қате таптың ба?')}
+        </button>
         {pct >= 98 && (
           <button className="button primary video-quiz" onClick={onQuiz}>
             {t('Что ты понял? Проверим', 'Түсінгеніңді тексерейік')}
@@ -2054,5 +2163,76 @@ export function ProfilePage() {
         </section>
       </div>
     </div>
+  );
+}
+
+const reportReasons = [
+  ['mistake', 'Ошибка в объяснении', 'Түсіндірмеде қате бар'],
+  ['unsafe', 'Небезопасно или обидно', 'Қауіпті немесе қорлайды'],
+  ['spam', 'Реклама или спам', 'Жарнама немесе спам'],
+  ['copyright', 'Чужой материал', 'Біреудің материалы'],
+  ['other', 'Другое', 'Басқа'],
+] as const;
+function ReportModal({ clip, onClose }: { clip: Clip; onClose: () => void }) {
+  const { t, notify } = useApp();
+  const [reason, setReason] = useState<string>('mistake'),
+    [comment, setComment] = useState(''),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  return (
+    <Modal title={t('Что не так с роликом?', 'Видеода не дұрыс емес?')} onClose={onClose}>
+      <p className="muted small">
+        {clip.episode.title} ·{' '}
+        {t(
+          'Жалобу увидит модератор. Если жалоб несколько, ролик временно уйдёт из общей ленты.',
+          'Шағымды модератор көреді.',
+        )}
+      </p>
+      <div className="answer-options">
+        {reportReasons.map(([key, ru, kk]) => (
+          <button
+            key={key}
+            className={reason === key ? 'selected' : ''}
+            onClick={() => setReason(key)}
+          >
+            {t(ru, kk)}
+          </button>
+        ))}
+      </div>
+      <label className="form-label">
+        {t('Что именно? (необязательно)', 'Нақты не? (міндетті емес)')}
+        <textarea
+          rows={3}
+          maxLength={1000}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder={t('Например: на 0:12 неверная формула', 'Мысалы: 0:12-де формула қате')}
+        />
+      </label>
+      {error && <p className="error-inline">{error}</p>}
+      <button
+        className="button primary full"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await post(`/seasons/${clip.season.id}/report`, {
+              reason,
+              comment,
+              episode_id: clip.episode.id,
+            });
+            notify(t('Спасибо! Модератор проверит.', 'Рахмет! Модератор тексереді.'));
+            onClose();
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {t('Отправить', 'Жіберу')}
+        <ArrowRight size={17} />
+      </button>
+    </Modal>
   );
 }

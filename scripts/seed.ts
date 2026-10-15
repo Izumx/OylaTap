@@ -6,10 +6,12 @@ import { renderEpisode } from '../server/render.js';
 if (process.env.DEMO_MODE !== 'true')
   throw new Error('Demo seeding requires DEMO_MODE=true. Do not seed a live school database.');
 const teacherId = '00000000-0000-4000-8000-000000000001',
-  studentId = '00000000-0000-4000-8000-000000000002';
+  studentId = '00000000-0000-4000-8000-000000000002',
+  creatorId = '00000000-0000-4000-8000-000000000003';
 for (const u of [
   { id: teacherId, name: 'Айгерим Садыкова', email: 'teacher@demo.oylatap.local', role: 'teacher' },
   { id: studentId, name: 'Али', email: 'student@demo.oylatap.local', role: 'student' },
+  { id: creatorId, name: 'Данияр Математик', email: 'creator@demo.oylatap.local', role: 'creator' },
 ]) {
   await db.query(
     'INSERT INTO users(id,name,email,role,password_hash) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',
@@ -250,6 +252,201 @@ for (const s of seasons) {
 await db.query(
   await readFile(new URL('../db/007_demo_final_questions.sql', import.meta.url), 'utf8'),
 );
+// The demo teacher also moderates, so the whole author → moderator → feed path can be tried.
+await db.query('UPDATE users SET is_moderator=true WHERE id=$1', [teacherId]);
+
+// Independent author's lessons: generated board and caption videos tied to programme topics.
+type Q = [string, string[], number, string, number];
+const authored: {
+  id: string;
+  title: string;
+  description: string;
+  grade: number;
+  style: 'board' | 'captions';
+  topic: string;
+  episodes: [string, string][];
+  micro: Q[];
+  final: Q[];
+}[] = [
+  {
+    id: '10000000-0000-4000-8000-000000000005',
+    title: 'Квадрат суммы без зубрёжки',
+    description: 'Почему (a + b)² ≠ a² + b², откуда берётся 2ab и как считать квадраты в уме.',
+    grade: 7,
+    style: 'board',
+    topic: '40000000-0000-4000-8000-000000000103',
+    episodes: [
+      [
+        'Почему не a² + b²?',
+        'Почему (a + b)² — это не a² + b²?\nПроверим на числах: a = 2, b = 3.\n`(2 + 3)² = 5² = 25`\n`2² + 3² = 4 + 9 = 13`\n25 ≠ 13 — значит, что-то потерялось.',
+      ],
+      [
+        'Раскрываем скобки',
+        '(a + b)² — это (a + b), умноженное само на себя.\n`(a + b)(a + b)`\nКаждое слагаемое первой скобки умножаем на каждое из второй.\n`= a² + ab + ab + b²`\n`= a² + 2ab + b²`\nПотерянная часть — это 2ab.',
+      ],
+      [
+        'Квадраты в уме',
+        'Формула помогает считать в уме.\n`51² = (50 + 1)²`\n`= 2500 + 100 + 1`\n`= 2601`\nПопробуй сам: 31² = 900 + 60 + 1 = 961.',
+      ],
+    ],
+    micro: [
+      [
+        'Чему равно (2 + 3)²?',
+        ['13', '25', '10'],
+        1,
+        '(2 + 3)² = 5² = 25, а 2² + 3² = 13: квадрат суммы не равен сумме квадратов.',
+        0,
+      ],
+      [
+        'Какое слагаемое теряют, когда пишут (a + b)² = a² + b²?',
+        ['2ab', 'ab²', '2a + 2b'],
+        0,
+        'При раскрытии (a + b)(a + b) получаются два произведения ab, вместе 2ab.',
+        1,
+      ],
+      ['Чему равно 21²?', ['421', '441', '401'], 1, '21² = (20 + 1)² = 400 + 40 + 1 = 441.', 2],
+    ],
+    final: [
+      [
+        'Раскройте скобки: (x + 4)²',
+        ['x² + 16', 'x² + 8x + 16', 'x² + 4x + 16'],
+        1,
+        'По формуле: x² + 2·x·4 + 4² = x² + 8x + 16.',
+        1,
+      ],
+      [
+        'Почему 3² + 4² ≠ (3 + 4)²?',
+        ['Не хватает слагаемого 2·3·4 = 24', 'Они равны', 'Потому что 3 и 4 — разные числа'],
+        0,
+        '(3 + 4)² = 49 = 9 + 24 + 16, а 3² + 4² = 25. Разница 24 — это 2ab.',
+        0,
+      ],
+      [
+        'Чему равно 101²?',
+        ['10 201', '10 001', '1 201'],
+        0,
+        '(100 + 1)² = 10 000 + 200 + 1 = 10 201.',
+        2,
+      ],
+    ],
+  },
+  {
+    id: '10000000-0000-4000-8000-000000000006',
+    title: 'Квадратный корень за три шага',
+    description:
+      'Что такое √, почему у отрицательного числа нет корня и как оценить √50 без калькулятора.',
+    grade: 8,
+    style: 'captions',
+    topic: '40000000-0000-4000-8000-000000000201',
+    episodes: [
+      [
+        'Обратное действие',
+        'Возведём 7 в квадрат: 7² = 49.\nКорень задаёт обратный вопрос: какое неотрицательное число в квадрате даёт 49?\n`√49 = 7`\nКвадратный корень всегда неотрицателен.',
+      ],
+      [
+        'Почему нет √(−4)',
+        'Любое число в квадрате неотрицательно.\n`2² = 4 и (−2)² = 4`\nНи одно действительное число в квадрате не даёт −4.\nПоэтому среди действительных чисел √(−4) не существует.',
+      ],
+      [
+        'Оценка корня',
+        '√50 — не целое число, но его можно оценить.\n`7² = 49, 8² = 64`\n50 лежит между 49 и 64, значит √50 между 7 и 8.\nИ ближе к 7, потому что 50 ближе к 49.',
+      ],
+    ],
+    micro: [
+      [
+        'Чему равен √81?',
+        ['9', '−9', '40,5'],
+        0,
+        '9² = 81, а квадратный корень неотрицателен, поэтому √81 = 9.',
+        0,
+      ],
+      [
+        'Почему среди действительных чисел нет √(−9)?',
+        ['Квадрат любого числа неотрицателен', 'Потому что 9 нечётное', 'Он есть и равен −3'],
+        0,
+        '(−3)² = 9, а не −9. Квадрат действительного числа не бывает отрицательным.',
+        1,
+      ],
+      [
+        'Между какими целыми числами лежит √30?',
+        ['5 и 6', '4 и 5', '15 и 16'],
+        0,
+        '5² = 25 < 30 < 36 = 6², значит 5 < √30 < 6.',
+        2,
+      ],
+    ],
+    final: [
+      ['Чему равен √144?', ['12', '72', '−12'], 0, '12² = 144, корень неотрицателен.', 0],
+      [
+        'Какое выражение не имеет смысла среди действительных чисел?',
+        ['√0', '√(−1)', '√1'],
+        1,
+        '√0 = 0, √1 = 1, а квадрат действительного числа не может равняться −1.',
+        1,
+      ],
+      [
+        'Какое целое число ближе всего к √99?',
+        ['10', '9', '50'],
+        0,
+        '10² = 100, а 99 очень близко к 100.',
+        2,
+      ],
+    ],
+  },
+];
+for (const s of authored) {
+  if (!(await one('SELECT id FROM seasons WHERE id=$1', [s.id]))) {
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query(
+        "INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,color,art,status,source_name,visibility,style,topic_id,published_at) VALUES($1,$2,$3,$4,'algebra','ru',$5,'slate','math','published','Демонстрационные материалы OylaTap; требуется проверка учителем','public',$6,$7,now())",
+        [s.id, creatorId, s.title, s.description, s.grade, s.style, s.topic],
+      );
+      const ids: string[] = [];
+      for (const [i, e] of s.episodes.entries()) {
+        ids.push(randomUUID());
+        await c.query(
+          'INSERT INTO episodes(id,season_id,position,title,script) VALUES($1,$2,$3,$4,$5)',
+          [ids[i], s.id, i, ...e],
+        );
+      }
+      for (const [i, q] of [
+        ...s.micro.map((q) => [...q, 'micro'] as const),
+        ...s.final.map((q) => [...q, 'final'] as const),
+      ].entries())
+        await c.query(
+          'INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id,purpose) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+          [randomUUID(), s.id, i, q[0], JSON.stringify(q[1]), q[2], q[3], ids[q[4]], q[5]],
+        );
+      await c.query(
+        "INSERT INTO moderation_decisions(id,season_id,moderator_id,decision,note) VALUES($1,$2,$3,'approved','Демонстрационный пример')",
+        [randomUUID(), s.id, teacherId],
+      );
+      await c.query('COMMIT');
+    } catch (e) {
+      await c.query('ROLLBACK');
+      throw e;
+    } finally {
+      c.release();
+    }
+  }
+  for (const e of await rows('SELECT * FROM episodes WHERE season_id=$1 ORDER BY position', [
+    s.id,
+  ])) {
+    try {
+      if (!e.media_path) throw new Error('missing');
+      await access(e.media_path);
+    } catch {
+      await renderEpisode(e, {
+        color: 'slate',
+        style: s.style,
+        language: 'ru',
+        author: 'Данияр Математик',
+      });
+    }
+  }
+}
 const classId = '20000000-0000-4000-8000-000000000001';
 await db.query(
   "INSERT INTO classrooms(id,teacher_id,name,code,current_season_id) VALUES($1,$2,'7 А · История и литература','OYLA7A',$3) ON CONFLICT(id) DO NOTHING",
@@ -263,5 +460,7 @@ await db.query(
   "INSERT INTO assignments(id,class_id,season_id,due_at) VALUES($1,$2,$3,now()+interval '7 days') ON CONFLICT(class_id,season_id) DO NOTHING",
   [randomUUID(), classId, seasons[0].id],
 );
-console.log('Demo users, 4 seasons with playable caption videos, classroom and assignment ready.');
+console.log(
+  'Demo users (student, teacher-moderator, author), 6 seasons with playable videos, classroom and assignment ready.',
+);
 await db.end();

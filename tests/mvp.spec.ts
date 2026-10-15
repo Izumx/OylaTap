@@ -166,7 +166,7 @@ test('teacher imports material, edits quiz, renders, previews and publishes', as
     .fill('Объяснение связывает причины и изменения.');
   await page.getByRole('button', { name: 'К видео', exact: true }).click();
   await expect(page).toHaveURL(/\/studio\/[0-9a-f-]+$/);
-  await page.getByRole('button', { name: 'Собрать карточки', exact: true }).click();
+  await page.getByRole('button', { name: 'Собрать видео', exact: true }).click();
   await expect(page.getByText('Видео готово', { exact: true })).toBeVisible({ timeout: 25000 });
   await page.getByRole('button', { name: 'Посмотреть серию', exact: true }).click();
   const d = page.getByRole('dialog');

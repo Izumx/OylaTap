@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db, rows, one } from './db.js';
 import { required, teacher } from './auth.js';
 import { dailyPlan } from './daily-plan.js';
+import { subjectSchema } from './curriculum.js';
 const uid = z.string().uuid();
 const day = "(now() AT TIME ZONE 'Asia/Qyzylorda')::date";
 export function dailyRouter(visibilitySql: string) {
@@ -54,9 +55,7 @@ export function dailyRouter(visibilitySql: string) {
     const d = z
       .object({
         current_season_id: uid.nullable(),
-        interests: z
-          .array(z.enum(['kz-history', 'world-history', 'kz-literature', 'ru-literature']))
-          .max(4),
+        interests: z.array(subjectSchema).max(subjectSchema.options.length),
         reminder_enabled: z.boolean(),
         reminder_time: z.string().regex(/^(0[8-9]|1\d|20):[0-5]\d$/),
       })
@@ -89,7 +88,7 @@ export function dailyRouter(visibilitySql: string) {
     if (
       !(await one('SELECT id FROM classrooms WHERE id=$1 AND teacher_id=$2', [id, req.user!.id])) ||
       !(await one(
-        "SELECT id FROM seasons WHERE id=$1 AND status='published' AND (visibility='public' OR owner_id=$2)",
+        "SELECT id FROM seasons WHERE id=$1 AND status='published' AND ((visibility='public' AND NOT hidden) OR owner_id=$2)",
         [season_id, req.user!.id],
       ))
     ) {

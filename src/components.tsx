@@ -18,8 +18,9 @@ import {
   Globe2,
   Sparkles,
   Moon,
+  ShieldCheck,
 } from 'lucide-react';
-import { useApp, post, type Season, subjects, minutes } from './lib';
+import { useApp, post, type Season, subjects, minutes, statusLabels, isAuthor } from './lib';
 export function Logo() {
   return (
     <Link className="logo" to="/" aria-label="OylaTap — главная">
@@ -48,7 +49,20 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
     ['/results', 'Результаты', 'Нәтижелер', ChartNoAxesCombined],
     ['/library', 'Библиотека', 'Кітапхана', Library],
   ] as const;
-  const links = user?.role === 'teacher' ? teacherLinks : studentLinks;
+  const creatorLinks = [
+    ['/studio', 'Мои видео', 'Менің видеоларым', Clapperboard],
+    ['/stats', 'Статистика', 'Статистика', ChartNoAxesCombined],
+    ['/library', 'Библиотека', 'Кітапхана', Library],
+  ] as const;
+  const moderation = [['/moderation', 'Модерация', 'Модерация', ShieldCheck]] as const;
+  const links = [
+    ...(user?.role === 'teacher'
+      ? teacherLinks
+      : user?.role === 'creator'
+        ? creatorLinks
+        : studentLinks),
+    ...(user?.is_moderator ? moderation : []),
+  ];
   return (
     <div className={`app-shell ${feed ? 'feed-layout' : ''}`}>
       <aside className="sidebar">
@@ -56,10 +70,12 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
         <div className="side-label">
           {user?.role === 'teacher'
             ? t('ПРОСТРАНСТВО УЧИТЕЛЯ', 'МҰҒАЛІМ КАБИНЕТІ')
-            : t('ТВОЁ ПРОСТРАНСТВО', 'СЕНІҢ КЕҢІСТІГІҢ')}
+            : user?.role === 'creator'
+              ? t('ПРОСТРАНСТВО АВТОРА', 'АВТОР КЕҢІСТІГІ')
+              : t('ТВОЁ ПРОСТРАНСТВО', 'СЕНІҢ КЕҢІСТІГІҢ')}
         </div>
         <nav>
-          {user?.role === 'teacher' && (
+          {isAuthor(user) && (
             <NavLink to="/" end>
               <Play size={21} />
               <span>{t('Лента', 'Лента')}</span>
@@ -77,10 +93,12 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
             </NavLink>
           ))}
         </nav>
-        {user?.role === 'teacher' ? (
+        {isAuthor(user) ? (
           <Link className="button primary create-link" to="/studio/new">
             <Plus size={18} />
-            {t('Создать сезон', 'Маусым жасау')}
+            {user?.role === 'creator'
+              ? t('Создать видео', 'Видео жасау')
+              : t('Создать сезон', 'Маусым жасау')}
           </Link>
         ) : (
           <div className="side-note">
@@ -118,7 +136,9 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
                   <small>
                     {user.role === 'teacher'
                       ? t('Учитель', 'Мұғалім')
-                      : t(`${user.grade} класс`, `${user.grade} сынып`)}
+                      : user.role === 'creator'
+                        ? t('Автор', 'Автор')
+                        : t(`${user.grade} класс`, `${user.grade} сынып`)}
                   </small>
                 </span>
                 <ArrowUpRight size={17} />
@@ -261,7 +281,17 @@ export function State({
     );
   return <>{children}</>;
 }
-export function Private({ children, teacher = false }: { children: ReactNode; teacher?: boolean }) {
+export function Private({
+  children,
+  teacher = false,
+  author = false,
+  moderator = false,
+}: {
+  children: ReactNode;
+  teacher?: boolean;
+  author?: boolean;
+  moderator?: boolean;
+}) {
   const { user, loading, login, t } = useApp();
   if (loading) return <State loading>{null}</State>;
   if (!user)
@@ -283,10 +313,20 @@ export function Private({ children, teacher = false }: { children: ReactNode; te
         </button>
       </div>
     );
-  if (teacher && user.role !== 'teacher')
+  if (
+    (teacher && user.role !== 'teacher') ||
+    (author && !isAuthor(user)) ||
+    (moderator && !user.is_moderator)
+  )
     return (
       <div className="empty-state">
-        <h2>{t('Это кабинет учителя', 'Бұл мұғалім кабинеті')}</h2>
+        <h2>
+          {teacher
+            ? t('Это кабинет учителя', 'Бұл мұғалім кабинеті')
+            : moderator
+              ? t('Раздел для модераторов', 'Модераторларға арналған бөлім')
+              : t('Студия для учителей и авторов', 'Мұғалімдер мен авторлар студиясы')}
+        </h2>
         <Link className="button primary" to="/">
           {t('Вернуться к обучению', 'Оқуға оралу')}
         </Link>
@@ -352,6 +392,16 @@ export function SeasonArt({
             <path d="M46 250h315" />
             <path d="m194 251 22-57 19 57" fill={ink} />
           </>
+        ) : art === 'math' ? (
+          <>
+            <rect x="70" y="70" width="260" height="170" rx="14" fill={ink} />
+            <path d="M100 120h60M130 90v60" stroke={light} strokeWidth="6" />
+            <path d="M200 120h60" stroke={light} strokeWidth="6" />
+            <path d="M200 175h60M200 195h60" stroke={light} strokeWidth="6" />
+            <path d="m104 172 44 44M148 172l-44 44" stroke={light} strokeWidth="6" />
+            <path d="M70 262h260" />
+            <circle cx="300" cy="96" r="12" fill={light} />
+          </>
         ) : art === 'route' ? (
           <>
             <path d="M42 230q60-130 125-64t89-89 113-35" strokeDasharray="7 8" strokeWidth="5" />
@@ -414,17 +464,7 @@ export function SeasonCard({ season, studio = false }: { season: Season; studio?
           </span>
           {studio ? (
             <span className={`status ${season.status}`}>
-              {
-                (
-                  {
-                    draft: 'Черновик',
-                    rendering: 'Сборка',
-                    review: 'На проверке',
-                    published: 'Опубликован',
-                    failed: 'Нужен повтор',
-                  } as Record<string, string>
-                )[season.status]
-              }
+              {season.hidden ? 'Скрыт по жалобам' : statusLabels[season.status]}
             </span>
           ) : season.completed > 0 ? (
             <span className="mint">

@@ -10,6 +10,7 @@ import { HistoryPage, AttemptPage, PracticePage } from './Assessments';
 import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from './Student';
 import { StudioPage, EditorPage, ClassesPage } from './Teacher';
 import { ResultsPage } from './Results';
+import { StatsPage, ModerationPage } from './Creator';
 import './style.css';
 import './comfort.css';
 import './reports.css';
@@ -73,7 +74,7 @@ function App() {
         <Route
           path="/studio"
           element={
-            <Private teacher>
+            <Private author>
               <StudioPage />
             </Private>
           }
@@ -81,7 +82,7 @@ function App() {
         <Route
           path="/studio/new"
           element={
-            <Private teacher>
+            <Private author>
               <EditorPage />
             </Private>
           }
@@ -89,8 +90,24 @@ function App() {
         <Route
           path="/studio/:id"
           element={
-            <Private teacher>
+            <Private author>
               <EditorPage />
+            </Private>
+          }
+        />
+        <Route
+          path="/stats"
+          element={
+            <Private author>
+              <StatsPage />
+            </Private>
+          }
+        />
+        <Route
+          path="/moderation"
+          element={
+            <Private moderator>
+              <ModerationPage />
             </Private>
           }
         />

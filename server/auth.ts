@@ -5,9 +5,11 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  role: 'student' | 'teacher';
+  role: 'student' | 'teacher' | 'creator';
   grade: number;
   language: 'ru' | 'kk';
+  trust_level: 'new' | 'trusted';
+  is_moderator: boolean;
 };
 declare global {
   namespace Express {
@@ -53,7 +55,7 @@ export async function auth(req: Request, res: Response, next: NextFunction) {
   const token = cookieToken(req);
   if (token && /^[a-f0-9]{64}$/.test(token)) {
     req.user = await one<User>(
-      'SELECT u.id,u.name,u.email,u.role,u.grade,u.language FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=$1 AND expires_at>now()',
+      'SELECT u.id,u.name,u.email,u.role,u.grade,u.language,u.trust_level,u.is_moderator FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=$1 AND expires_at>now()',
       [tokenHash(token)],
     );
   }
@@ -69,6 +71,21 @@ export function required(req: Request, res: Response, next: NextFunction) {
 export function teacher(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== 'teacher') {
     res.status(403).json({ error: 'Этот раздел доступен учителю' });
+    return;
+  }
+  next();
+}
+// Teachers and independent authors share the studio. Classes and reports stay teacher-only.
+export function author(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'teacher' && req.user?.role !== 'creator') {
+    res.status(403).json({ error: 'Студия доступна учителям и авторам' });
+    return;
+  }
+  next();
+}
+export function moderator(req: Request, res: Response, next: NextFunction) {
+  if (!req.user?.is_moderator) {
+    res.status(403).json({ error: 'Раздел доступен модераторам' });
     return;
   }
   next();

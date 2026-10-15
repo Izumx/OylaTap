@@ -10,9 +10,21 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  role: 'student' | 'teacher';
+  role: 'student' | 'teacher' | 'creator';
   grade: number;
   language: 'ru' | 'kk';
+  trust_level: 'new' | 'trusted';
+  is_moderator: boolean;
+};
+// Teachers and independent authors share the studio.
+export const isAuthor = (user: User | null) => user?.role === 'teacher' || user?.role === 'creator';
+export type ModerationFlag = {
+  code: string;
+  severity: 'block' | 'review';
+  source: 'rules' | 'ai';
+  field: string;
+  excerpt: string;
+  message: string;
 };
 export type Episode = {
   id: string;
@@ -21,7 +33,11 @@ export type Episode = {
   position: number;
   duration: number;
   has_video: boolean;
+  has_voice?: boolean;
+  media_kind?: 'rendered' | 'uploaded';
   completed: boolean;
+  likes?: number;
+  liked?: boolean;
 };
 export type Question = {
   purpose?: 'micro' | 'final';
@@ -71,6 +87,18 @@ export type Season = {
   source_name: string;
   source_text?: string;
   render_error?: string;
+  style?: 'cards' | 'board' | 'captions';
+  voice?: 'none' | 'tts' | 'own';
+  topic_id?: string | null;
+  topic_title_ru?: string | null;
+  topic_title_kk?: string | null;
+  owner_name?: string;
+  owner_role?: string;
+  owner_trust?: string;
+  hidden?: boolean;
+  moderation_flags?: ModerationFlag[];
+  moderation_note?: string | null;
+  moderation_history?: { decision: string; note: string; created_at: string }[];
   episodes?: Episode[];
   questions?: Question[];
   attempts?: any[];
@@ -86,6 +114,17 @@ export const subjects: Record<string, [string, string]> = {
   'world-history': ['Всемирная история', 'Дүниежүзі тарихы'],
   'kz-literature': ['Казахская литература', 'Қазақ әдебиеті'],
   'ru-literature': ['Русская литература', 'Орыс әдебиеті'],
+  algebra: ['Алгебра', 'Алгебра'],
+  geometry: ['Геометрия', 'Геометрия'],
+};
+export const videoStyles: Record<string, [string, string, string]> = {
+  board: ['Доска', 'Тақта', 'Шаги появляются по очереди, формулы выделены. Для задач и решений.'],
+  captions: [
+    'Субтитры',
+    'Субтитрлер',
+    'Одна крупная фраза на экране, как в коротких видео. Для историй и фактов.',
+  ],
+  cards: ['Карточка', 'Карточка', 'Весь текст серии на одном экране. Простой и быстрый вариант.'],
 };
 export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch('/api' + path, {
@@ -223,7 +262,9 @@ export const minutes = (seconds: number) => Math.max(1, Math.ceil(seconds / 60))
 export const statusLabels: Record<string, string> = {
   draft: 'Черновик',
   rendering: 'Собираем видео',
-  review: 'На проверке',
+  review: 'Видео собрано',
+  moderation: 'У модератора',
   published: 'Опубликован',
+  rejected: 'Нужны правки',
   failed: 'Нужен повтор',
 };

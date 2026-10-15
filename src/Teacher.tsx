@@ -18,18 +18,35 @@ import {
   Play,
   CheckCheck,
   CalendarDays,
+  Download,
+  ShieldAlert,
+  ChartNoAxesCombined,
 } from 'lucide-react';
-import { api, post, useApp, useResource, subjects, statusLabels, type Season } from './lib';
+import {
+  api,
+  post,
+  useApp,
+  useResource,
+  subjects,
+  statusLabels,
+  videoStyles,
+  type Season,
+  type ModerationFlag,
+} from './lib';
 import { PageHeader, State, SeasonCard, Modal } from './components';
+import { VoiceInput, FlagList, StyleAdvice } from './Creator';
 import type { ResultRow } from './report-types';
 
 export function StudioPage() {
   const r = useResource<Season[]>('/my-seasons');
   const { t, user } = useApp();
+  const creator = user?.role === 'creator';
   return (
     <div className="page">
       <PageHeader
-        eyebrow={t('СТУДИЯ УЧИТЕЛЯ', 'МҰҒАЛІМ СТУДИЯСЫ')}
+        eyebrow={
+          creator ? t('СТУДИЯ АВТОРА', 'АВТОР СТУДИЯСЫ') : t('СТУДИЯ УЧИТЕЛЯ', 'МҰҒАЛІМ СТУДИЯСЫ')
+        }
         title={t(
           `${user!.name.split(' ')[0]}, история начинается с вас`,
           `${user!.name.split(' ')[0]}, оқиға сізден басталады`,
@@ -39,12 +56,27 @@ export function StudioPage() {
           'Сіздің материал, сценарий және жариялау алдындағы шешіміңіз.',
         )}
         action={
-          <Link className="button primary" to="/studio/new">
-            <Plus size={18} />
-            {t('Создать сезон', 'Маусым жасау')}
-          </Link>
+          <div className="header-actions">
+            <Link className="button secondary" to="/stats">
+              <ChartNoAxesCombined size={18} />
+              {t('Статистика', 'Статистика')}
+            </Link>
+            <Link className="button primary" to="/studio/new">
+              <Plus size={18} />
+              {creator ? t('Создать видео', 'Видео жасау') : t('Создать сезон', 'Маусым жасау')}
+            </Link>
+          </div>
         }
       />
+      {user?.trust_level === 'new' && (
+        <div className="inline-note trust-note">
+          <ShieldAlert size={18} />
+          {t(
+            'Вы новый автор: ролики для общей ленты сначала проверяет модератор. После трёх одобренных публикаций без подтверждённых жалоб ролики будут выходить сразу.',
+            'Сіз жаңа авторсыз: ортақ лентаға арналған видеоны алдымен модератор тексереді. Үш мақұлданған жарияланымнан кейін видео бірден шығады.',
+          )}
+        </div>
+      )}
       <div className="studio-intro">
         <span className="studio-intro-icon">
           <Clapperboard size={32} />
@@ -53,8 +85,8 @@ export function StudioPage() {
           <h2>{t('От материала до «я понял!»', 'Материалдан «түсіндім!» дегенге дейін')}</h2>
           <p>
             {t(
-              'Загрузите конспект, соберите серии и добавьте видео из Flow. Можно начать с простых карточек с субтитрами.',
-              'Конспект жүктеп, серияларды жинап, Flow видеосын қосыңыз. Субтитрлі карточкалардан бастауға болады.',
+              'Напишите объяснение или загрузите конспект. OylaTap разобьёт его на серии и соберёт вертикальное видео: доска с пошаговыми формулами, крупные субтитры или карточки, со своим голосом или без. Готовый MP4 из Flow тоже можно загрузить.',
+              'Түсіндірме жазыңыз немесе конспект жүктеңіз. OylaTap оны серияларға бөліп, тік видео жинайды: қадамдық формулалары бар тақта, ірі субтитрлер немесе карточкалар. Flow-дан дайын MP4 жүктеуге де болады.',
             )}
           </p>
         </div>
@@ -90,7 +122,13 @@ export function StudioPage() {
     </div>
   );
 }
-type DraftEpisode = { id?: string; title: string; script: string; has_video?: boolean };
+type DraftEpisode = {
+  id?: string;
+  title: string;
+  script: string;
+  has_video?: boolean;
+  has_voice?: boolean;
+};
 type DraftQuestion = {
   purpose?: 'micro' | 'final';
   episode_position?: number;
@@ -107,6 +145,9 @@ type Draft = {
   grade: number;
   source_text: string;
   source_name: string;
+  style: 'cards' | 'board' | 'captions';
+  voice: 'none' | 'tts' | 'own';
+  topic_id: string | null;
   episodes: DraftEpisode[];
   questions: DraftQuestion[];
 };
@@ -118,15 +159,19 @@ const empty = (): Draft => ({
   grade: 7,
   source_text: '',
   source_name: 'Материал учителя',
+  style: 'board',
+  voice: 'none',
+  topic_id: null,
   episodes: [],
   questions: [],
 });
 export function EditorPage() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { t, locale, notify } = useApp();
+  const { t, locale, notify, user } = useApp();
+  const creator = user?.role === 'creator';
   const r = useResource<Season>(id ? `/seasons/${id}` : null);
-  const ai = useResource<{ draft_enabled: boolean }>('/ai/status');
+  const ai = useResource<{ draft_enabled: boolean; tts: Record<string, boolean> }>('/ai/status');
   const [suggested, setSuggested] = useState<{
     episodes: DraftEpisode[];
     questions: DraftQuestion[];
@@ -150,6 +195,9 @@ export function EditorPage() {
         grade: s.grade,
         source_text: s.source_text || '',
         source_name: s.source_name,
+        style: s.style || 'cards',
+        voice: s.voice || 'none',
+        topic_id: s.topic_id || null,
         episodes: s.episodes || [],
         questions: (s.questions || []).map((q) => ({
           ...q,
@@ -171,6 +219,9 @@ export function EditorPage() {
   const status = r.data?.status || 'draft';
   const locked = ['published', 'rendering'].includes(status);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
+  const topics = useResource<{ topics: { id: string; title_ru: string; title_kk: string }[] }>(
+    `/curriculum?subject=${draft.subject}&grade=${draft.grade}`,
+  );
   async function save(): Promise<string | null> {
     setBusy(true);
     setError('');
@@ -205,7 +256,7 @@ export function EditorPage() {
     const pieces: string[] = [];
     let part = '';
     for (const word of words) {
-      if ((part + ' ' + word).length > 420 && part) {
+      if ((part + ' ' + word).length > 600 && part) {
         pieces.push(part);
         part = word;
       } else part = (part + ' ' + word).trim();
@@ -220,7 +271,7 @@ export function EditorPage() {
       );
       return;
     }
-    if (pieces.some((p) => p.length > 500)) {
+    if (pieces.some((p) => p.length > 700)) {
       setError('В материале есть слишком длинное слово или ссылка. Сократите текст.');
       return;
     }
@@ -276,7 +327,7 @@ export function EditorPage() {
                 {t('Сохранить', 'Сақтау')}
               </button>
             )}
-            {status === 'published' && (
+            {status === 'published' && !creator && (
               <button className="button primary" onClick={() => setAssign(true)}>
                 <UsersRound size={17} />
                 {t('Назначить классу', 'Сыныпқа беру')}
@@ -332,7 +383,12 @@ export function EditorPage() {
                 </label>
                 <label>
                   {t('Предмет', 'Пән')}
-                  <select value={draft.subject} onChange={(e) => set('subject', e.target.value)}>
+                  <select
+                    value={draft.subject}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, subject: e.target.value, topic_id: null }))
+                    }
+                  >
                     {Object.entries(subjects).map(([k, v]) => (
                       <option key={k} value={k}>
                         {v[locale === 'kk' ? 1 : 0]}
@@ -355,7 +411,9 @@ export function EditorPage() {
                     {t('Класс', 'Сынып')}
                     <select
                       value={draft.grade}
-                      onChange={(e) => set('grade', Number(e.target.value))}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, grade: Number(e.target.value), topic_id: null }))
+                      }
                     >
                       {[5, 6, 7, 8, 9, 10, 11].map((g) => (
                         <option key={g}>{g}</option>
@@ -363,6 +421,28 @@ export function EditorPage() {
                     </select>
                   </label>
                 </div>
+                <label>
+                  {t('Тема школьной программы', 'Мектеп бағдарламасының тақырыбы')}
+                  <select
+                    value={draft.topic_id || ''}
+                    onChange={(e) => set('topic_id', e.target.value || null)}
+                  >
+                    <option value="">
+                      {t('Не привязывать к программе', 'Бағдарламаға байланыстырмау')}
+                    </option>
+                    {topics.data?.topics.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {locale === 'kk' ? x.title_kk : x.title_ru}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {t(
+                      'По теме ролик покажут ученикам, которые проходят её сейчас.',
+                      'Тақырып бойынша видео оны қазір өтіп жатқан оқушыларға көрсетіледі.',
+                    )}
+                  </small>
+                </label>
               </fieldset>
             </section>
             <section className="panel">
@@ -418,8 +498,8 @@ export function EditorPage() {
               <div className="inline-note small">
                 <FileText size={18} />
                 {t(
-                  'Сейчас используется разбиение текста на редактируемые серии. Генерация сценария ИИ ещё не подключена.',
-                  'Қазір мәтін өңделетін серияларға бөлінеді. ЖИ сценарийі әлі қосылмаған.',
+                  '«Подготовить серии» делит ваш текст на части без изменений. ИИ-черновик переписывает материал в короткие серии с вопросами и учитывает приёмы самых понятных роликов платформы.',
+                  '«Серияларды дайындау» мәтінді өзгертпей бөледі. ЖИ жобасы материалды сұрақтары бар қысқа серияларға айналдырады.',
                 )}
               </div>
               <button
@@ -478,8 +558,8 @@ export function EditorPage() {
                 <h2>{t('Один эпизод — одна мысль', 'Бір эпизод — бір ой')}</h2>
                 <p className="muted">
                   {t(
-                    'Проверьте факты и сделайте текст удобным для чтения. До 500 символов на серию.',
-                    'Деректерді тексеріңіз. Әр серияға 500 таңбаға дейін.',
+                    'Проверьте факты. До 700 символов на серию. Каждая строка или предложение — отдельный шаг на экране; формулу пишите отдельной строкой или в `обратных кавычках`.',
+                    'Деректерді тексеріңіз. Әр серияға 700 таңбаға дейін. Әр жол немесе сөйлем — экрандағы жеке қадам; формуланы жеке жолға немесе `кері тырнақшаға` жазыңыз.',
                   )}
                 </p>
               </div>
@@ -524,11 +604,11 @@ export function EditorPage() {
                             ),
                           )
                         }
-                        rows={4}
-                        maxLength={500}
+                        rows={5}
+                        maxLength={700}
                       />
                     </label>
-                    <small className="muted">{ep.script.length}/500</small>
+                    <small className="muted">{ep.script.length}/700</small>
                   </fieldset>
                   {!locked && (
                     <button
@@ -776,14 +856,52 @@ export function EditorPage() {
           <>
             <section className="panel video-production">
               <div>
-                <span className="eyebrow">{t('ВЫБЕРИТЕ СПОСОБ', 'ТӘСІЛДІ ТАҢДАҢЫЗ')}</span>
-                <h2>
-                  {t('Ролики из Flow или учебные карточки', 'Flow видеосы немесе оқу карточкалары')}
-                </h2>
-                <p className="muted">
+                <span className="eyebrow">{t('ВИДЕО БЕЗ МОНТАЖА', 'МОНТАЖСЫЗ ВИДЕО')}</span>
+                <h2>{t('Как будет выглядеть ролик', 'Видео қалай көрінеді')}</h2>
+                <StyleAdvice />
+                <fieldset disabled={locked || busy} className="style-picker">
+                  <legend className="sr-only">{t('Стиль видео', 'Видео стилі')}</legend>
+                  {Object.entries(videoStyles).map(([key, [ru, kk, hint]]) => (
+                    <label key={key} className={draft.style === key ? 'active' : ''}>
+                      <input
+                        type="radio"
+                        name="style"
+                        value={key}
+                        checked={draft.style === key}
+                        onChange={() => set('style', key as Draft['style'])}
+                      />
+                      <b>{t(ru, kk)}</b>
+                      <small>{hint}</small>
+                    </label>
+                  ))}
+                </fieldset>
+                <label className="form-label">
+                  {t('Голос', 'Дауыс')}
+                  <select
+                    disabled={locked || busy}
+                    value={draft.voice}
+                    onChange={(e) => set('voice', e.target.value as Draft['voice'])}
+                  >
+                    <option value="none">
+                      {t('Без озвучки, только текст', 'Дыбыссыз, тек мәтін')}
+                    </option>
+                    <option value="own">
+                      {t('Мой голос: запишу каждую серию', 'Өз дауысым: әр серияны жазамын')}
+                    </option>
+                    <option value="tts" disabled={!ai.data?.tts?.[draft.language]}>
+                      {ai.data?.tts?.[draft.language]
+                        ? t('Синтез речи', 'Сөйлеу синтезі')
+                        : t(
+                            'Синтез речи — не настроен на сервере',
+                            'Сөйлеу синтезі — серверде бапталмаған',
+                          )}
+                    </option>
+                  </select>
+                </label>
+                <p className="muted small">
                   {t(
-                    'Из Google Flow загрузите MP4 для каждой серии. Для проверки сценария можно собрать вертикальные видео с читаемым текстом, без озвучки.',
-                    'Google Flow-дан әр серияның MP4 файлын қосыңыз. Сценарийді тексеру үшін дыбыссыз мәтін видеосын жинауға болады.',
+                    'Ролик подстроит смену шагов под вашу речь. Загруженный MP4 (например, из Google Flow) пересборка не трогает.',
+                    'Қадамдар сөзіңізге сай ауысады. Жүктелген MP4 файлын қайта жинау өзгертпейді.',
                   )}
                 </p>
               </div>
@@ -811,7 +929,7 @@ export function EditorPage() {
                 }}
               >
                 <Clapperboard size={19} />
-                {t('Собрать карточки', 'Карточкаларды жинау')}
+                {t('Собрать видео', 'Видео жинау')}
               </button>
             </section>
             {status === 'rendering' && (
@@ -829,6 +947,37 @@ export function EditorPage() {
               </div>
             )}
             {r.data?.render_error && <div className="error-inline">{r.data.render_error}</div>}
+            {(status === 'moderation' || status === 'rejected' || r.data?.hidden) && (
+              <section className={`panel moderation-status ${status}`}>
+                <ShieldAlert size={26} />
+                <div>
+                  <h2>
+                    {r.data?.hidden
+                      ? t('Скрыт из общей ленты по жалобам', 'Шағымдар бойынша жасырылды')
+                      : status === 'moderation'
+                        ? t('Ролик у модератора', 'Видео модераторда')
+                        : t('Модератор вернул на доработку', 'Модератор түзетуге қайтарды')}
+                  </h2>
+                  {status === 'moderation' && (
+                    <p>
+                      {t(
+                        'Модератор проверит факты, безопасность и ответы. Обычно это занимает до суток. Пока вы ждёте, правки вернут ролик в черновик.',
+                        'Модератор деректерді, қауіпсіздікті және жауаптарды тексереді.',
+                      )}
+                    </p>
+                  )}
+                  {r.data?.moderation_note && (
+                    <p className="moderator-note">
+                      <b>{t('Комментарий модератора:', 'Модератор пікірі:')}</b>{' '}
+                      {r.data.moderation_note}
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
+            {!!r.data?.moderation_flags?.length && (
+              <FlagList flags={r.data.moderation_flags as ModerationFlag[]} />
+            )}
             <div className="video-episode-grid">
               {draft.episodes.map((ep, i) => (
                 <section className="panel video-episode" key={ep.id || i}>
@@ -842,11 +991,32 @@ export function EditorPage() {
                   </div>
                   <h3>{ep.title}</h3>
                   <p>{ep.script}</p>
+                  {draft.voice === 'own' && !locked && (
+                    <VoiceInput
+                      seasonId={id}
+                      episode={ep}
+                      disabled={busy}
+                      onSaved={() => {
+                        r.reload();
+                        notify(t('Голос сохранён. Соберите видео заново.', 'Дауыс сақталды.'));
+                      }}
+                      onError={setError}
+                    />
+                  )}
                   {ep.has_video && (
                     <button className="button secondary full" onClick={() => setPreview(ep)}>
                       <Eye size={17} />
                       {t('Посмотреть серию', 'Серияны көру')}
                     </button>
+                  )}
+                  {ep.has_video && status === 'published' && ep.id && (
+                    <a
+                      className="button secondary full"
+                      href={`/api/episodes/${ep.id}/video?download=1`}
+                    >
+                      <Download size={17} />
+                      {t('Скачать для TikTok / Reels', 'TikTok / Reels үшін жүктеу')}
+                    </a>
                   )}
                   {!locked && (
                     <label className="button secondary upload-button">
@@ -867,28 +1037,47 @@ export function EditorPage() {
                 </section>
               ))}
             </div>
-            {status !== 'published' && (
+            {status !== 'published' && status !== 'moderation' && (
               <section className="panel publication-panel">
                 <CheckCheck size={30} />
                 <div>
-                  <h2>{t('Последнее слово — за учителем', 'Соңғы шешім — мұғалімдікі')}</h2>
+                  <h2>
+                    {creator
+                      ? t('Перед отправкой — проверка автора', 'Жібермес бұрын — автор тексеруі')
+                      : t('Последнее слово — за учителем', 'Соңғы шешім — мұғалімдікі')}
+                  </h2>
                   <p>
                     {t(
                       'Проверьте каждую серию, факты, субтитры и правильные ответы перед публикацией.',
                       'Әр серияны, деректі, субтитрді және дұрыс жауаптарды тексеріңіз.',
                     )}
                   </p>
-                  <label className="form-label visibility-label">
-                    {t('Кто увидит сезон', 'Маусымды кім көреді')}
-                    <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-                      <option value="class">
-                        {t('Только назначенные классы', 'Тек берілген сыныптар')}
-                      </option>
-                      <option value="public">
-                        {t('Все пользователи библиотеки', 'Кітапхананың барлық пайдаланушылары')}
-                      </option>
-                    </select>
-                  </label>
+                  {!creator && (
+                    <label className="form-label visibility-label">
+                      {t('Кто увидит сезон', 'Маусымды кім көреді')}
+                      <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+                        <option value="class">
+                          {t('Только назначенные классы', 'Тек берілген сыныптар')}
+                        </option>
+                        <option value="public">
+                          {t('Общая лента и библиотека', 'Ортақ лента және кітапхана')}
+                        </option>
+                      </select>
+                    </label>
+                  )}
+                  {(creator || visibility === 'public') && (
+                    <p className="muted small">
+                      {user?.trust_level === 'trusted'
+                        ? t(
+                            'Вы проверенный автор: ролик без замечаний автоматической проверки выйдет сразу.',
+                            'Сіз тексерілген авторсыз: ескертусіз видео бірден шығады.',
+                          )
+                        : t(
+                            'Для общей ленты ролик сначала посмотрит модератор.',
+                            'Ортақ лента үшін видеоны алдымен модератор көреді.',
+                          )}
+                    </p>
+                  )}
                   <label className="consent">
                     <input
                       type="checkbox"
@@ -908,9 +1097,16 @@ export function EditorPage() {
                     setBusy(true);
                     setError('');
                     try {
-                      await post(`/seasons/${id}/publish`, { confirmed: true, visibility });
+                      const v = await post(`/seasons/${id}/publish`, {
+                        confirmed: true,
+                        visibility,
+                      });
                       r.reload();
-                      notify(t('Сезон опубликован!', 'Маусым жарияланды!'));
+                      notify(
+                        v.status === 'moderation'
+                          ? t('Отправлено модератору', 'Модераторға жіберілді')
+                          : t('Сезон опубликован!', 'Маусым жарияланды!'),
+                      );
                     } catch (e) {
                       setError((e as Error).message);
                     } finally {
@@ -918,7 +1114,9 @@ export function EditorPage() {
                     }
                   }}
                 >
-                  {t('Опубликовать', 'Жариялау')}
+                  {creator || (visibility === 'public' && user?.trust_level !== 'trusted')
+                    ? t('Отправить на проверку', 'Тексеруге жіберу')
+                    : t('Опубликовать', 'Жариялау')}
                   <ArrowRight size={17} />
                 </button>
               </section>
@@ -929,16 +1127,23 @@ export function EditorPage() {
                 <div>
                   <h2>{t('Сезон в библиотеке', 'Маусым кітапханада')}</h2>
                   <p>
-                    {t(
-                      'Назначьте его классу и посмотрите, что поняли ученики.',
-                      'Сыныпқа беріп, оқушылардың түсінгенін көріңіз.',
-                    )}
+                    {creator
+                      ? t(
+                          'Ролик в общей ленте. Досмотры, лайки и понимание — в статистике.',
+                          'Видео ортақ лентада. Көрулер мен түсіну — статистикада.',
+                        )
+                      : t(
+                          'Назначьте его классу и посмотрите, что поняли ученики.',
+                          'Сыныпқа беріп, оқушылардың түсінгенін көріңіз.',
+                        )}
                   </p>
                 </div>
-                <button className="button primary" onClick={() => setAssign(true)}>
-                  {t('Назначить классу', 'Сыныпқа беру')}
-                  <ArrowRight size={18} />
-                </button>
+                {!creator && (
+                  <button className="button primary" onClick={() => setAssign(true)}>
+                    {t('Назначить классу', 'Сыныпқа беру')}
+                    <ArrowRight size={18} />
+                  </button>
+                )}
                 <Link className="button secondary" to={`/watch/${id}`}>
                   <Play size={17} />
                   {t('Открыть ленту', 'Лентаны ашу')}

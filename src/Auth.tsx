@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, GraduationCap, BookOpen, LoaderCircle } from 'lucide-react';
+import { ArrowRight, GraduationCap, BookOpen, LoaderCircle, Clapperboard } from 'lucide-react';
 import { Modal } from './components';
 import { post, useApp } from './lib';
 export default function Auth() {
   const { authOpen, closeAuth, refresh, demo, t } = useApp();
   const nav = useNavigate();
   const [register, setRegister] = useState(false),
-    [role, setRole] = useState<'student' | 'teacher'>('student'),
+    [role, setRole] = useState<'student' | 'teacher' | 'creator'>('student'),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   async function run(data: unknown, path: string) {
@@ -17,7 +17,7 @@ export default function Auth() {
       const r = await post(path, data);
       await refresh();
       closeAuth();
-      if (r.user.role === 'teacher') nav('/studio');
+      if (r.user.role !== 'student') nav('/studio');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -48,7 +48,19 @@ export default function Auth() {
           <BookOpen size={18} />
           {t('Я учитель', 'Мұғаліммін')}
         </button>
+        <button className={role === 'creator' ? 'active' : ''} onClick={() => setRole('creator')}>
+          <Clapperboard size={18} />
+          {t('Я автор', 'Автормын')}
+        </button>
       </div>
+      {role === 'creator' && (
+        <p className="muted small">
+          {t(
+            'Знаете тему и умеете объяснять? Напишите текст — видео соберёт OylaTap. Перед общей лентой ролик проверит модератор.',
+            'Тақырыпты білесіз бе? Мәтін жазыңыз — видеоны OylaTap жинайды. Ортақ лентаға дейін модератор тексереді.',
+          )}
+        </p>
+      )}
       <form
         className="form-stack"
         onSubmit={(e) => {
@@ -155,10 +167,13 @@ export default function Auth() {
             disabled={busy}
             onClick={() => void run({ role }, '/auth/demo')}
           >
-            {t(
-              role === 'student' ? 'Попробовать как ученик' : 'Попробовать как учитель',
-              role === 'student' ? 'Оқушы демосы' : 'Мұғалім демосы',
-            )}
+            {
+              {
+                student: t('Попробовать как ученик', 'Оқушы демосы'),
+                teacher: t('Попробовать как учитель', 'Мұғалім демосы'),
+                creator: t('Попробовать как автор', 'Автор демосы'),
+              }[role]
+            }
             <ArrowUp />
           </button>
         </div>
