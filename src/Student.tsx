@@ -368,6 +368,18 @@ export function Feed() {
                       {t('верных микровопросов', 'дұрыс микросұрақ')}
                     </span>
                   </div>
+                  {current && (
+                    <div className="session-next">
+                      <button className="button primary full" onClick={() => open('quiz')}>
+                        <ListChecks size={18} />
+                        {t('Закрепить тему: пройти тест', 'Тақырыпты бекіту: тест тапсыру')}
+                      </button>
+                      <Link className="text-button" to={`/learn/${current.season.id}`}>
+                        {t('Мой маршрут по теме', 'Тақырып бойынша жолым')}
+                        <ArrowRight size={16} />
+                      </Link>
+                    </div>
+                  )}
                   {today?.tomorrow && (
                     <div className="tomorrow-topic">
                       {t('Следующая встреча с темой', 'Тақырыппен келесі кездесу')}
@@ -588,6 +600,18 @@ export function Feed() {
           season={current.season}
           onClose={() => setModal(null)}
           onRecord={() => setModal('record')}
+          onReview={(position) => {
+            setModal(null);
+            const index = current.season.episodes!.findIndex((ep) => ep.position === position);
+            if (index >= 0) {
+              if (id === current.season.id) {
+                const video = scroll.current?.querySelectorAll('video').item(index);
+                if (video) video.currentTime = 0;
+                go(index);
+              }
+              navigate(`/watch/${current.season.id}?episode=${index}`);
+            }
+          }}
         />
       )}
       {current && modal === 'record' && (
@@ -725,14 +749,16 @@ function FeedVideo({
   );
 }
 
-function Quiz({
+export function Quiz({
   season,
   onClose,
   onRecord,
+  onReview,
 }: {
   season: Season;
   onClose: () => void;
   onRecord: () => void;
+  onReview: (position: number) => void;
 }) {
   const { t } = useApp();
   const questions = season.questions || [];
@@ -782,20 +808,36 @@ function Quiz({
             </p>
           </div>
           <div className="quiz-review">
-            {result.results.map((r: any, i: number) => (
-              <div className={r.passed ? 'passed' : 'wrong'} key={r.id}>
-                <b>
-                  {r.passed ? <Check size={18} /> : <RotateCcw size={18} />} {i + 1}. {r.prompt}
-                </b>
-                <p>{r.explanation}</p>
-                {!r.passed && (
-                  <small>
-                    {t('Верный ответ: ', 'Дұрыс жауап: ')}
-                    {r.options[r.correct]}
-                  </small>
-                )}
-              </div>
-            ))}
+            {result.results.map((r: any, i: number) => {
+              const question = questions.find((q) => q.id === r.id);
+              const episode = season.episodes?.find(
+                (ep) => ep.position === question?.episode_position,
+              );
+              return (
+                <div className={r.passed ? 'passed' : 'wrong'} key={r.id}>
+                  <b>
+                    {r.passed ? <Check size={18} /> : <RotateCcw size={18} />} {i + 1}. {r.prompt}
+                  </b>
+                  <p>{r.explanation}</p>
+                  {!r.passed && (
+                    <small>
+                      {t('Верный ответ: ', 'Дұрыс жауап: ')}
+                      {r.options[r.correct]}
+                    </small>
+                  )}
+                  {!r.passed && episode?.has_video && (
+                    <button
+                      className="text-button review-episode"
+                      onClick={() => onReview(episode.position)}
+                    >
+                      <Play size={15} />
+                      {t('Повторить серию: ', 'Серияны қайталау: ')}
+                      {episode.title}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <button className="button primary full" onClick={onRecord}>
             <Mic size={18} />
@@ -811,6 +853,10 @@ function Quiz({
           >
             {t('Пройти ещё раз', 'Қайта тапсыру')}
           </button>
+          <Link className="text-button full quiz-progress-link" to="/progress" onClick={onClose}>
+            {t('Посмотреть мой прогресс', 'Прогресімді көру')}
+            <ArrowRight size={16} />
+          </Link>
         </>
       ) : (
         <>
@@ -881,7 +927,7 @@ function Quiz({
     </Modal>
   );
 }
-function Recorder({ season, onClose }: { season: Season; onClose: () => void }) {
+export function Recorder({ season, onClose }: { season: Season; onClose: () => void }) {
   const { t, notify } = useApp();
   const [recording, setRecording] = useState(false),
     [seconds, setSeconds] = useState(0),
@@ -1285,7 +1331,7 @@ export function AssignmentsPage() {
               const done = a.best_score !== null;
               const late = new Date(a.due_at) < new Date();
               return (
-                <Link className="assignment-card" key={a.id} to={`/watch/${a.season_id}`}>
+                <Link className="assignment-card" key={a.id} to={`/learn/${a.season_id}`}>
                   <div className="assignment-art">
                     <SeasonArt art={a.art} color={a.color} />
                   </div>
@@ -1346,6 +1392,12 @@ export function ProgressPage() {
   const r = useResource<any>('/progress');
   const { t, user } = useApp();
   const s = r.data?.stats;
+  const nextSeason: Season | undefined = r.data?.seasons.find(
+    (season: Season) =>
+      season.completed < season.episode_count ||
+      season.best_score === null ||
+      season.best_score < 100,
+  );
   return (
     <div className="page">
       <PageHeader
@@ -1399,6 +1451,31 @@ export function ProgressPage() {
                 </small>
               </span>
             </div>
+            {nextSeason && (
+              <Link className="continue-topic" to={`/learn/${nextSeason.id}`}>
+                <span className="continue-icon">
+                  <BookOpen size={24} />
+                </span>
+                <span>
+                  <small>{t('СЛЕДУЮЩИЙ ШАГ', 'КЕЛЕСІ ҚАДАМ')}</small>
+                  <strong>{nextSeason.title}</strong>
+                  <span>
+                    {nextSeason.completed < nextSeason.episode_count
+                      ? t('Продолжи с непросмотренной серии.', 'Көрілмеген сериядан жалғастыр.')
+                      : nextSeason.best_score === null
+                        ? t(
+                            'Все серии просмотрены. Пора проверить понимание.',
+                            'Барлық сериялар көрілді. Енді түсінгеніңді тексер.',
+                          )
+                        : t(
+                            'Повтори сложное и попробуй тест ещё раз.',
+                            'Күрделі тұстарды қайталап, тестті қайта тапсырып көр.',
+                          )}
+                  </span>
+                </span>
+                <ArrowRight size={21} />
+              </Link>
+            )}
             <div className="progress-panels">
               <section className="panel">
                 <div className="panel-heading">

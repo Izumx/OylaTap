@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { db } from '../server/db';
 const seed = '10000000-0000-4000-8000-000000000001';
 const createdUsers: string[] = [];
@@ -373,4 +374,85 @@ test('personal topic preferences persist and teacher topic takes priority for th
   expect(pref.current_season_id).toBe('10000000-0000-4000-8000-000000000003');
   expect(pref.reminder_enabled).toBe(false);
   await teacher.dispose();
+});
+
+test('topic journey resumes unwatched video, reviews a quiz mistake and keeps progress after reload', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await account(page.request, 'student');
+  const season = await (await page.request.get(`/api/seasons/${seed}`)).json();
+  await page.request.post(`/api/episodes/${season.episodes[0].id}/complete`);
+  await page.goto('/library');
+  await page.locator(`.season-card[href="/learn/${seed}"]`).click();
+  await expect(page.getByRole('heading', { name: 'Твой маршрут по теме' })).toBeVisible();
+  await expect(page.locator('.journey-steps li').nth(0)).toContainText('1/3 просмотрено');
+  const resume = page.getByRole('link', { name: 'Продолжить просмотр', exact: true });
+  await expect(resume).toHaveAttribute('href', `/watch/${seed}?episode=1`);
+  await resume.click();
+  for (const [index, answer] of [
+    [1, 'B Керей и Жанибек'],
+    [2, 'A В Жетысу'],
+  ] as const) {
+    const video = page.locator('.feed-slide video').nth(index);
+    await expect
+      .poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime))
+      .toBeGreaterThan(0);
+    await video.evaluate((el: HTMLVideoElement) => {
+      el.currentTime = el.duration - 0.15;
+    });
+    const micro = page.getByRole('dialog', { name: 'Один вопрос — и дальше' });
+    await expect(micro).toBeVisible();
+    await micro.getByRole('button', { name: answer, exact: true }).click();
+    await micro.getByRole('button', { name: 'Проверить', exact: true }).click();
+    await expect(micro).toContainText('Ответ верный!');
+    await micro.getByRole('button', { name: 'Дальше по маршруту' }).click();
+  }
+  await expect(page.locator('.session-end')).toBeInViewport();
+  await page.getByRole('button', { name: 'Закрепить тему: пройти тест' }).click();
+  const quiz = page.getByRole('dialog', { name: 'Проверь понимание' });
+  await quiz.getByRole('button', { name: 'A Создало условия для объединения' }).click();
+  await quiz.getByRole('button', { name: 'Дальше', exact: true }).click();
+  await quiz.getByRole('button', { name: 'A Абылай и Кенесары' }).click();
+  await quiz.getByRole('button', { name: 'Дальше', exact: true }).click();
+  await quiz.getByRole('button', { name: 'A В Жетысу' }).click();
+  await quiz.getByRole('button', { name: 'Показать результат' }).click();
+  await expect(quiz.locator('.quiz-result h3')).toHaveText('2 из 3');
+  await quiz.getByRole('button', { name: 'Повторить серию: Новое начало в Жетысу' }).click();
+  await expect(page).toHaveURL(new RegExp(`/watch/${seed}\\?episode=1$`));
+  await expect(page.locator('.chapter-list>button.active b')).toHaveText('Новое начало в Жетысу');
+  await page.goto(`/learn/${seed}`);
+  await page.reload();
+  await expect(page.locator('.journey-steps li').nth(0)).toContainText('3/3 просмотрено');
+  await expect(page.locator('.journey-steps li').nth(1)).toContainText(
+    'Последний результат: 2 из 3',
+  );
+  await page.getByRole('button', { name: 'Рассказать', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Начать запись', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect(page.locator('.journey-steps li').nth(2)).toContainText(
+    'Голосом, с текстовым дополнением',
+  );
+  await mkdir('.local/qa', { recursive: true });
+  await page.screenshot({ path: '.local/qa/learning-route-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('heading', { name: 'Твой маршрут по теме' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '.local/qa/learning-route-mobile.png', fullPage: true });
+  await page.goto('/progress');
+  await expect(page.locator('.continue-topic')).toContainText('Повтори сложное');
+  await page.locator('.continue-topic').click();
+  await expect(page).toHaveURL(`/learn/${seed}`);
+  expect(errors).toEqual([]);
+});
+
+test('guest can explore a topic, and test entry asks for login without recording progress', async ({
+  page,
+}) => {
+  await page.goto(`/learn/${seed}`);
+  await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Войти');
+  expect((await page.request.get('/api/progress')).status()).toBe(401);
 });

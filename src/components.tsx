@@ -6,6 +6,7 @@ import {
   Play,
   Library,
   ClipboardList,
+  ListChecks,
   UserRound,
   LogOut,
   Plus,
@@ -349,7 +350,7 @@ export function SeasonArt({
 export function SeasonCard({ season, studio = false }: { season: Season; studio?: boolean }) {
   const { t, locale } = useApp();
   return (
-    <Link className="season-card" to={studio ? `/studio/${season.id}` : `/watch/${season.id}`}>
+    <Link className="season-card" to={studio ? `/studio/${season.id}` : `/learn/${season.id}`}>
       <div className="card-art">
         <SeasonArt art={season.art} color={season.color} />
         <span className="card-language">{season.language === 'kk' ? 'ҚАЗ' : 'РУС'}</span>
@@ -389,15 +390,21 @@ export function SeasonCard({ season, studio = false }: { season: Season; studio?
             </span>
           ) : season.completed > 0 ? (
             <span className="mint">
-              {season.completed}/{season.episode_count} {t('пройдено', 'аяқталды')}
+              {season.completed}/{season.episode_count} {t('просмотрено', 'көрілді')}
             </span>
           ) : (
             <span>
-              {t('Начать сезон', 'Бастау')}
+              {t('Открыть тему', 'Тақырыпты ашу')}
               <ArrowUpRight size={14} />
             </span>
           )}
         </div>
+        {!studio && season.best_score !== null && (
+          <div className="card-test-result">
+            <ListChecks size={14} /> {t('Лучший результат теста:', 'Тесттің үздік нәтижесі:')}{' '}
+            {season.best_score}%
+          </div>
+        )}
         {season.completed > 0 && (
           <div className="progress-track">
             <i style={{ width: `${(season.completed / season.episode_count) * 100}%` }} />
