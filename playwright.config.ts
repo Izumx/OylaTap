@@ -1,5 +1,4 @@
 import { defineConfig } from '@playwright/test';
-import { existsSync } from 'node:fs';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
@@ -8,10 +7,10 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:3000',
     viewport: { width: 1440, height: 900 },
+    // The product plays H.264 MP4; bundled Chromium lacks that codec on Linux.
+    channel: process.env.CHROMIUM_PATH ? undefined : 'chrome',
     launchOptions: {
-      executablePath:
-        process.env.CHROMIUM_PATH ||
-        (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined),
+      executablePath: process.env.CHROMIUM_PATH || undefined,
       args: [
         '--no-sandbox',
         '--use-fake-ui-for-media-stream',
