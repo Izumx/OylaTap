@@ -11,11 +11,9 @@ import {
   BookOpen,
   UsersRound,
   Copy,
-  Download,
   Eye,
   Trash2,
   LoaderCircle,
-  Mic,
   RefreshCw,
   Play,
   CheckCheck,
@@ -23,7 +21,7 @@ import {
 } from 'lucide-react';
 import { api, post, useApp, useResource, subjects, statusLabels, type Season } from './lib';
 import { PageHeader, State, SeasonCard, Modal } from './components';
-import { Stat } from './Student';
+import type { ResultRow } from './report-types';
 
 export function StudioPage() {
   const r = useResource<Season[]>('/my-seasons');
@@ -1181,7 +1179,7 @@ export function ClassesPage() {
                     'Оқушылар «Тапсырмалар» бетінде осы кодты енгізсін.',
                   )}
                 </p>
-                <Link className="button secondary full" to="/results">
+                <Link className="button secondary full" to={`/results?class_id=${c.id}`}>
                   {t('Результаты класса', 'Сынып нәтижелері')}
                   <ArrowRight size={16} />
                 </Link>
@@ -1275,170 +1273,12 @@ export function ClassesPage() {
     </div>
   );
 }
-export function ResultsPage() {
-  const r = useResource<any[]>('/results');
-  const { t } = useApp();
-  const [classId, setClassId] = useState('all'),
-    [review, setReview] = useState<any>(null);
-  const classes = [
-    ...new Map(
-      (r.data || []).map((x) => [x.class_id, { id: x.class_id, name: x.class_name }]),
-    ).values(),
-  ];
-  const list = (r.data || []).filter((x) => classId === 'all' || x.class_id === classId);
-  return (
-    <div className="page">
-      <PageHeader
-        eyebrow={t('ПОНИМАНИЕ, А НЕ ПРОСТО ПРОСМОТР', 'ТЕК КӨРУ ЕМЕС, ТҮСІНУ')}
-        title={t('Как идут дела у класса', 'Сыныптың жағдайы')}
-        description={t(
-          'Просмотр, тест и голосовой пересказ показаны отдельно. Оценка пересказа — за вами.',
-          'Көру, тест және мазмұндау бөлек көрсетілген. Мазмұндауды сіз бағалайсыз.',
-        )}
-        action={
-          <a className="button secondary" href="/api/results.csv" download>
-            <Download size={17} />
-            {t('Скачать CSV', 'CSV жүктеу')}
-          </a>
-        }
-      />
-      <State {...r} retry={r.reload}>
-        <div className="stats-grid three">
-          <Stat
-            icon={<UsersRound />}
-            value={new Set(list.map((x) => x.user_id)).size}
-            label={t('Учеников в заданиях', 'Тапсырмадағы оқушылар')}
-          />
-          <Stat
-            icon={<BookOpen />}
-            value={list.filter((x) => x.test_score !== null).length}
-            label={t('Тестов выполнено', 'Аяқталған тесттер')}
-          />
-          <Stat
-            icon={<Mic />}
-            value={list.filter((x) => x.retelling_id && x.teacher_score === null).length}
-            label={t('Пересказов ждут проверки', 'Тексеруді күтетін жазбалар')}
-          />
-        </div>
-        <div className="results-toolbar">
-          <h2>{t('Работы учеников', 'Оқушылардың жұмыстары')}</h2>
-          <select
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
-            aria-label="Фильтр класса"
-          >
-            <option value="all">{t('Все классы', 'Барлық сыныптар')}</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        {list.length ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Ученик / сезон', 'Оқушы / маусым')}</th>
-                  <th>{t('Просмотр', 'Көру')}</th>
-                  <th>{t('Микровопросы', 'Микросұрақтар')}</th>
-                  <th>{t('Лучший тест', 'Үздік тест')}</th>
-                  <th>{t('Пересказ', 'Мазмұндау')}</th>
-                  <th>{t('Действие', 'Әрекет')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((x) => (
-                  <tr key={`${x.class_id}-${x.user_id}-${x.season_id}`}>
-                    <td>
-                      <b>{x.name}</b>
-                      <span>{x.class_name}</span>
-                      <small>{x.title}</small>
-                    </td>
-                    <td>
-                      <b>
-                        {x.watched}/{x.episode_count}
-                      </b>
-                      <div className="progress-track">
-                        <i style={{ width: `${(x.watched / x.episode_count) * 100}%` }} />
-                      </div>
-                    </td>
-                    <td>
-                      <b>
-                        {x.micro_correct}/{x.episode_count}
-                      </b>
-                    </td>
-                    <td>
-                      {x.test_score !== null ? (
-                        <span className="score-badge">{x.test_score}%</span>
-                      ) : (
-                        <span className="muted">{t('Не пройден', 'Аяқталмады')}</span>
-                      )}
-                    </td>
-                    <td>
-                      {x.teacher_score !== null ? (
-                        <span className="score-badge">{x.teacher_score}%</span>
-                      ) : x.retelling_id ? (
-                        <span className="status review">{t('На проверку', 'Тексеруге')}</span>
-                      ) : (
-                        <span className="muted">{t('Нет записи', 'Жазба жоқ')}</span>
-                      )}
-                    </td>
-                    <td>
-                      {x.retelling_id ? (
-                        <button
-                          className="button secondary small-button"
-                          onClick={() => setReview(x)}
-                        >
-                          <Mic size={15} />
-                          {t('Проверить', 'Тексеру')}
-                        </button>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <BookOpen size={36} />
-            <h2>{t('Результаты появятся здесь', 'Нәтижелер осында пайда болады')}</h2>
-            <p>
-              {t(
-                'Создайте класс, пригласите учеников и назначьте сезон.',
-                'Сынып жасап, оқушыларды шақырып, маусымды беріңіз.',
-              )}
-            </p>
-            <Link className="button primary" to="/classes">
-              {t('К классам', 'Сыныптарға')}
-              <ArrowRight size={17} />
-            </Link>
-          </div>
-        )}
-      </State>
-      {review && (
-        <ReviewModal
-          data={review}
-          onClose={() => setReview(null)}
-          onSaved={() => {
-            r.reload();
-            setReview(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-function ReviewModal({
+export function ReviewModal({
   data,
   onClose,
   onSaved,
 }: {
-  data: any;
+  data: ResultRow;
   onClose: () => void;
   onSaved: () => void;
 }) {

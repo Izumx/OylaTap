@@ -22,6 +22,7 @@ import {
 import { dataDir, renderSeason } from './render.js';
 import { dailyRouter } from './daily.js';
 import { assessmentsRouter } from './assessments.js';
+import { reportsRouter } from './reports.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
 
 const app = express();
@@ -797,55 +798,7 @@ app.patch('/api/retellings/:id/review', required, teacher, async (req, res) => {
   );
   res.json({ ok: true });
 });
-async function resultsForTeacher(id: string) {
-  return rows(
-    `SELECT c.id class_id,c.name class_name,u.id user_id,u.name,s.id season_id,s.title,
-    (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
-    (SELECT count(*)::int FROM completions p JOIN episodes e ON e.id=p.episode_id WHERE e.season_id=s.id AND p.user_id=u.id) watched,
-    (SELECT count(DISTINCT ma.episode_id)::int FROM micro_answers ma JOIN episodes e ON e.id=ma.episode_id WHERE e.season_id=s.id AND ma.user_id=u.id AND ma.passed) micro_correct,
-    (SELECT max(round(100.0*t.score/t.total))::int FROM assessment_attempts t WHERE t.season_id=s.id AND t.user_id=u.id) test_score,
-    r.id retelling_id,r.teacher_score,r.feedback,r.transcript,r.created_at retelling_at
-    FROM classrooms c JOIN memberships m ON m.class_id=c.id JOIN users u ON u.id=m.user_id
-    JOIN assignments a ON a.class_id=c.id JOIN seasons s ON s.id=a.season_id
-    LEFT JOIN LATERAL(SELECT * FROM retellings WHERE user_id=u.id AND season_id=s.id ORDER BY created_at DESC LIMIT 1) r ON true
-    WHERE c.teacher_id=$1 ORDER BY c.name,u.name,s.title`,
-    [id],
-  );
-}
-app.get('/api/results', required, teacher, async (req, res) =>
-  res.json(await resultsForTeacher(req.user!.id)),
-);
-app.get('/api/results.csv', required, teacher, async (req, res) => {
-  const list = await resultsForTeacher(req.user!.id);
-  const cell = (v: unknown) =>
-    '"' +
-    String(v ?? '')
-      .replace(/^[=+@\-\t\r]/, "'")
-      .replaceAll('"', '""') +
-    '"';
-  const csv = [
-    'Класс;Ученик;Сезон;Просмотрено;Серий;Верные микровопросы;Лучший тест %;Пересказ %;Комментарий',
-    ...list.map((r) =>
-      [
-        r.class_name,
-        r.name,
-        r.title,
-        r.watched,
-        r.episode_count,
-        r.micro_correct,
-        r.test_score,
-        r.teacher_score,
-        r.feedback,
-      ]
-        .map(cell)
-        .join(';'),
-    ),
-  ].join('\r\n');
-  res
-    .type('text/csv; charset=utf-8')
-    .attachment('oylatap-results.csv')
-    .send('\uFEFF' + csv);
-});
+app.use('/api', reportsRouter());
 app.use('/api', (req, res) => res.status(404).json({ error: 'Такого действия нет' }));
 app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (error instanceof z.ZodError) {

@@ -1,0 +1,327 @@
+.reports-page {
+  max-width: 1280px;
+}
+.report-filters {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  flex-wrap: wrap;
+  padding: 20px;
+}
+.report-filters > label,
+.report-search {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.report-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.report-search label > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.report-search input {
+  min-width: 0;
+  width: 100%;
+}
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+.report-summary > .panel {
+  display: grid;
+  grid-template-columns: 26px 1fr 18px;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  padding: 22px;
+  color: inherit;
+  font: inherit;
+}
+.report-summary strong {
+  font-size: 32px;
+  line-height: 1;
+}
+.report-summary span {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.report-summary button {
+  cursor: pointer;
+}
+.report-summary button:hover {
+  border-color: #66816c;
+}
+.report-summary button > svg:last-child {
+  grid-column: 3;
+  grid-row: 1;
+}
+.report-scope {
+  margin: 14px 0 24px;
+  line-height: 1.6;
+}
+.report-insights {
+  padding: 24px;
+  margin-top: 28px;
+  margin-bottom: 30px;
+}
+.report-insights .section-heading {
+  margin-top: 0;
+}
+.report-insights .section-heading h2 {
+  margin: 8px 0 0;
+}
+.mistake-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+.common-mistake {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--bg);
+  min-width: 0;
+}
+.common-mistake h3 {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 12px 0 6px;
+  overflow-wrap: anywhere;
+}
+.mistake-count {
+  display: inline-block;
+  color: #f0be9e;
+  background: #b775431c;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.common-mistake details {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+.common-mistake summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.common-mistake .text-button {
+  font-size: 12px;
+  text-align: left;
+}
+.report-no-errors {
+  margin: 22px 0 0;
+  line-height: 1.6;
+  font-size: 14px;
+}
+.report-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.report-tabs button {
+  padding: 10px 15px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.report-tabs button[aria-pressed='true'] {
+  color: var(--ink);
+  background: var(--mint);
+  border-color: var(--mint);
+}
+.report-table table {
+  width: 100%;
+  table-layout: fixed;
+  white-space: normal;
+}
+.report-table {
+  background: var(--panel);
+}
+.report-table th {
+  color: var(--muted);
+  background: var(--bg);
+  font-size: 12px;
+  padding: 18px;
+}
+.report-table td:first-child {
+  min-width: 0;
+  max-width: none;
+}
+.report-table td:first-child b {
+  font-size: 14px;
+}
+.report-table td:first-child span,
+.report-table td:first-child small,
+.report-table td .muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+.report-table th:first-child {
+  width: 26%;
+}
+.report-table th:nth-child(2) {
+  width: 20%;
+}
+.report-table th:nth-child(3) {
+  width: 23%;
+}
+.report-table td {
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  color: inherit;
+  font-size: 13px;
+  padding: 18px;
+  border-color: var(--line);
+}
+.report-table td > small {
+  display: block;
+  line-height: 1.6;
+  margin-top: 5px;
+}
+.report-table td b small {
+  font-weight: 400;
+}
+.report-low {
+  color: #f0be9e;
+}
+.report-next {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+.report-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.report-row-actions .button {
+  white-space: normal;
+  text-align: left;
+}
+.teacher-attempt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.teacher-attempt .saved-score {
+  display: block;
+  margin: 18px 0;
+}
+.teacher-attempt .quiz-review {
+  margin-top: 20px;
+}
+.teacher-attempt .quiz-review h3 {
+  font-size: 15px;
+}
+@media (max-width: 800px) {
+  .report-summary {
+    gap: 10px;
+  }
+  .report-summary > .panel {
+    padding: 16px;
+  }
+  .report-summary strong {
+    font-size: 26px;
+  }
+  .report-table {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .report-table table,
+  .report-table tbody {
+    display: block;
+    min-width: 0;
+  }
+  .report-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .report-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    margin: 0 0 14px;
+    background: var(--panel);
+    padding: 8px;
+  }
+  .report-table td {
+    display: block;
+    border: 0;
+    padding: 12px;
+    min-width: 0;
+  }
+  .report-table td:first-child,
+  .report-table td:last-child {
+    grid-column: 1 / -1;
+  }
+  .report-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+}
+@media (max-width: 560px) {
+  .report-filters {
+    padding: 16px;
+    gap: 12px;
+  }
+  .report-filters > label {
+    flex-basis: 100%;
+  }
+  .report-summary {
+    grid-template-columns: 1fr;
+  }
+  .report-summary > .panel {
+    grid-template-columns: 24px 40px 1fr 16px;
+    gap: 12px;
+    padding: 16px;
+  }
+  .report-summary span {
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 12px;
+  }
+  .report-summary button > svg:last-child {
+    grid-column: 4;
+  }
+  .mistake-grid {
+    grid-template-columns: 1fr;
+  }
+  .report-insights {
+    padding: 18px;
+  }
+  .report-insights .eyebrow {
+    font-size: 10px;
+  }
+  .report-tabs {
+    gap: 6px;
+  }
+  .report-tabs button {
+    font-size: 12px;
+    padding: 9px 12px;
+  }
+}

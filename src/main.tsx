@@ -8,9 +8,11 @@ import { ReminderTicker } from './Learning';
 import { SeasonPage } from './SeasonPage';
 import { HistoryPage, AttemptPage, PracticePage } from './Assessments';
 import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from './Student';
-import { StudioPage, EditorPage, ClassesPage, ResultsPage } from './Teacher';
+import { StudioPage, EditorPage, ClassesPage } from './Teacher';
+import { ResultsPage } from './Results';
 import './style.css';
 import './comfort.css';
+import './reports.css';
 function App() {
   const loc = useLocation();
   return (
