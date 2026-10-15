@@ -5,7 +5,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: 'http://127.0.0.1:3100',
     viewport: { width: 1440, height: 900 },
     // The product plays H.264 MP4; bundled Chromium lacks that codec on Linux.
     channel: process.env.CHROMIUM_PATH ? undefined : 'chrome',
@@ -22,7 +22,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'npm run dev',
-    url: 'http://127.0.0.1:3000/api/health',
+    url: 'http://127.0.0.1:3100/api/health',
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },

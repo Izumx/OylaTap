@@ -25,9 +25,9 @@ async function actor(browser: Browser, name: string, role = 'student'): Promise<
     "INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '1 day')",
     [tokenHash(token), id],
   );
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await context.addCookies([
-    { name: 'oylatap_session', value: token, url: 'http://127.0.0.1:3000' },
+    { name: 'oylatap_session', value: token, url: 'http://127.0.0.1:3100' },
   ]);
   contexts.push(context);
   return { id, context };

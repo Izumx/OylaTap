@@ -1018,7 +1018,11 @@ if (process.env.NODE_ENV === 'production') {
   app.get('/{*splat}', (req, res) => res.sendFile(resolve('dist/index.html')));
 } else {
   const { createServer } = await import('vite');
-  const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
+  // Hot-reload socket gets its own port, so two checkouts can run side by side.
+  const vite = await createServer({
+    server: { middlewareMode: true, hmr: { port: Number(process.env.HMR_PORT) || 24700 } },
+    appType: 'spa',
+  });
   app.use(vite.middlewares);
 }
 await db.query('SELECT 1');
@@ -1026,7 +1030,7 @@ await db.query(
   "UPDATE seasons SET status='failed',render_error='Сервер перезапущен во время сборки. Можно повторить без потери сценария.' WHERE status='rendering'",
 );
 await db.query('DELETE FROM sessions WHERE expires_at<now()');
-const server = app.listen(Number(process.env.PORT) || 3000, '0.0.0.0', (error?: Error) => {
+const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: Error) => {
   if (error) {
     console.error('OylaTap could not bind its port:', error.message);
     process.exit(1);

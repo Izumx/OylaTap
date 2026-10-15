@@ -14,6 +14,7 @@ import { StatsPage, ModerationPage } from './Creator';
 import './style.css';
 import './comfort.css';
 import './reports.css';
+import './polish.css';
 function App() {
   const loc = useLocation();
   return (

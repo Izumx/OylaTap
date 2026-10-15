@@ -5,7 +5,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { hashPassword, tokenHash } from '../server/auth';
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-const baseURL = 'http://127.0.0.1:3000';
+const baseURL = 'http://127.0.0.1:3100';
 const seed = '10000000-0000-4000-8000-000000000001';
 const created: string[] = [],
   contexts: BrowserContext[] = [];

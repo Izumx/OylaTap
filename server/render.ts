@@ -83,8 +83,14 @@ const isFormula = (s: string) => /^`.*`$/.test(s.trim()) || /^[^\p{L}]*=|\s=\s/u
 const plain = (s: string) => s.replace(/`/g, '');
 const words = (s: string) => Math.max(1, plain(s).split(/\s+/).filter(Boolean).length);
 
-function footer(author: string | undefined, fill: string) {
-  return `<text x="56" y="${H - 56}" font-size="24" fill="${fill}" opacity=".75">${xml(
+// Players draw their own controls over the top and bottom of a vertical video (the app's
+// topic badge, TikTok's caption and buttons). Text stays between these safe margins.
+// The right edge holds the action buttons, so text keeps clear of it as well.
+const TOP_SAFE = 170,
+  BOTTOM_SAFE = 340,
+  RIGHT_SAFE = 110;
+function signature(author: string | undefined, y: number, fill: string) {
+  return `<text x="56" y="${y}" font-size="22" fill="${fill}" opacity=".7">${xml(
     author ? `@${author.replace(/\s+/g, '_').slice(0, 30)} · oylatap` : 'oylatap',
   )}</text>`;
 }
@@ -94,21 +100,22 @@ function cardsFrame(ep: Episode, bg: string, author?: string) {
   const bodyLines = wrap(plain(ep.script), 31);
   if (bodyLines.length > 18)
     throw new Error('Сократите текст серии до 500 символов для читаемых субтитров.');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${bg}"/><circle cx="620" cy="120" r="220" fill="white" opacity=".06"/><circle cx="20" cy="1180" r="290" fill="white" opacity=".04"/><g font-family="${SANS}" fill="#f8f5e9">${titleLines.map((line, i) => `<text x="56" y="${190 + i * 58}" font-size="44" font-weight="bold">${xml(line)}</text>`).join('')}<rect x="56" y="${215 + titleLines.length * 58}" width="80" height="6" rx="3" fill="#bce8a3"/>${bodyLines.map((line, i) => `<text x="56" y="${310 + titleLines.length * 58 + i * 35}" font-size="28">${xml(line)}</text>`).join('')}${footer(author, '#f8f5e9')}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${bg}"/><circle cx="620" cy="120" r="220" fill="white" opacity=".06"/><circle cx="20" cy="1180" r="290" fill="white" opacity=".04"/><g font-family="${SANS}" fill="#f8f5e9">${signature(author, TOP_SAFE + 10, '#f8f5e9')}${titleLines.map((line, i) => `<text x="56" y="${TOP_SAFE + 70 + i * 58}" font-size="44" font-weight="bold">${xml(line)}</text>`).join('')}<rect x="56" y="${TOP_SAFE + 95 + titleLines.length * 58}" width="80" height="6" rx="3" fill="#bce8a3"/>${bodyLines.map((line, i) => `<text x="56" y="${TOP_SAFE + 160 + titleLines.length * 58 + i * 35}" font-size="28">${xml(line)}</text>`).join('')}</g></svg>`;
 }
 
 // Chalkboard: steps accumulate; the newest is bright, earlier ones dim. When the board
 // is full the oldest steps scroll away, as a teacher would wipe the top of the board.
 function boardFrame(ep: Episode, steps: string[], upto: number, author?: string) {
   const titleLines = wrap(ep.title, 26).slice(0, 3);
-  const top = 150 + titleLines.length * 52 + 50;
-  const bottom = H - 140;
+  const titleY = TOP_SAFE + 60;
+  const top = titleY + titleLines.length * 52 + 30;
+  const bottom = H - BOTTOM_SAFE;
   const blocks = steps.slice(0, upto + 1).map((s, i) => {
     const formula = isFormula(s);
     // Formulas shrink before they wrap: a line break inside an expression misleads.
     const length = plain(s).length;
     const size = formula ? (length <= 22 ? 40 : length <= 28 ? 34 : 28) : 30;
-    const lines = wrap(plain(s), formula ? Math.floor(570 / (size * 0.6)) : 38);
+    const lines = wrap(plain(s), formula ? Math.floor((W - 84 - RIGHT_SAFE) / (size * 0.6)) : 34);
     const lh = Math.round(size * 1.3);
     return { lines, formula, size, lh, newest: i === upto, height: lines.length * lh + 26 };
   });
@@ -140,26 +147,30 @@ function boardFrame(ep: Episode, steps: string[], upto: number, author?: string)
   const dots = steps
     .map(
       (_, i) =>
-        `<circle cx="${W / 2 - (steps.length - 1) * 12 + i * 24}" cy="${H - 100}" r="6" fill="${i <= upto ? '#ffd27a' : '#4d6b60'}"/>`,
+        `<circle cx="${W - 64 - (steps.length - 1 - i) * 22}" cy="${TOP_SAFE + 3}" r="6" fill="${i <= upto ? '#ffd27a' : '#4d6b60'}"/>`,
     )
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#1d332d"/><rect x="24" y="24" width="${W - 48}" height="${H - 48}" rx="28" fill="#21403a" stroke="#3b5c52" stroke-width="4"/><g font-family="${SANS}">${titleLines.map((line, i) => `<text x="64" y="${150 + i * 52}" font-size="40" font-weight="bold" fill="#ffd27a">${xml(line)}</text>`).join('')}<rect x="64" y="${150 + titleLines.length * 52 - 20}" width="${W - 128}" height="3" fill="#3b5c52"/>${body}${dots}${footer(author, '#d9e6df')}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#1d332d"/><rect x="24" y="24" width="${W - 48}" height="${H - 48}" rx="28" fill="#21403a" stroke="#3b5c52" stroke-width="4"/><g font-family="${SANS}">${signature(author, TOP_SAFE + 10, '#d9e6df')}${titleLines.map((line, i) => `<text x="64" y="${titleY + i * 52}" font-size="40" font-weight="bold" fill="#ffd27a">${xml(line)}</text>`).join('')}<rect x="64" y="${titleY + titleLines.length * 52 - 20}" width="${W - 128}" height="3" fill="#3b5c52"/>${body}${dots}</g></svg>`;
 }
 
 // Short-video captions: one phrase at a time, large and centred, with story-like progress.
 function captionsFrame(ep: Episode, steps: string[], at: number, bg: string, author?: string) {
   const step = plain(steps[at]);
   const size = step.length > 120 ? 40 : step.length > 70 ? 48 : 58;
-  const lines = wrap(step, Math.floor(600 / (size * 0.56))).slice(0, 10);
+  const textWidth = W - 56 - RIGHT_SAFE;
+  const centre = 56 + textWidth / 2;
+  const lines = wrap(step, Math.floor(textWidth / (size * 0.56))).slice(0, 10);
   const lh = size * 1.25;
-  const y0 = H / 2 - (lines.length * lh) / 2 + size;
+  // Centred within the safe area, which sits slightly above the frame's middle.
+  const middle = (TOP_SAFE + 120 + H - BOTTOM_SAFE) / 2;
+  const y0 = middle - (lines.length * lh) / 2 + size * 0.8;
   const bars = steps
     .map((_, i) => {
       const w = (W - 112 - (steps.length - 1) * 8) / steps.length;
-      return `<rect x="${56 + i * (w + 8)}" y="60" width="${w}" height="8" rx="4" fill="#ffffff" opacity="${i <= at ? 0.95 : 0.3}"/>`;
+      return `<rect x="${56 + i * (w + 8)}" y="${TOP_SAFE}" width="${w}" height="8" rx="4" fill="#ffffff" opacity="${i <= at ? 0.95 : 0.3}"/>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="#11151c"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/><circle cx="640" cy="260" r="260" fill="white" opacity=".05"/>${bars}<g font-family="${SANS}"><text x="56" y="130" font-size="28" fill="#ffffff" opacity=".8">${xml(wrap(ep.title, 40)[0])}</text>${lines.map((line, i) => `<text x="${W / 2}" y="${y0 + i * lh}" font-size="${size}" font-weight="bold" fill="${isFormula(steps[at]) ? '#ffd27a' : '#ffffff'}" text-anchor="middle"${isFormula(steps[at]) ? ` font-family="${MONO}"` : ''}>${xml(line)}</text>`).join('')}${footer(author, '#ffffff')}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="#11151c"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/><circle cx="640" cy="260" r="260" fill="white" opacity=".05"/>${bars}<g font-family="${SANS}"><text x="56" y="${TOP_SAFE + 60}" font-size="28" fill="#ffffff" opacity=".85">${xml(wrap(ep.title, 40)[0])}</text>${signature(author, TOP_SAFE + 96, '#ffffff')}${lines.map((line, i) => `<text x="${centre}" y="${y0 + i * lh}" font-size="${size}" font-weight="bold" fill="${isFormula(steps[at]) ? '#ffd27a' : '#ffffff'}" text-anchor="middle"${isFormula(steps[at]) ? ` font-family="${MONO}"` : ''}>${xml(line)}</text>`).join('')}</g></svg>`;
 }
 
 async function probeDuration(path: string) {

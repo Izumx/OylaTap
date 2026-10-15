@@ -209,7 +209,7 @@ for (const s of seasons) {
     try {
       await c.query('BEGIN');
       await c.query(
-        "INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,color,art,status,source_name,visibility) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'published','Демонстрационные материалы OylaTap; требуется проверка учителем','public')",
+        "INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,color,art,status,source_name,visibility,style) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'published','Демонстрационные материалы OylaTap; требуется проверка учителем','public','captions')",
         [s.id, teacherId, s.title, s.description, s.subject, s.language, s.grade, s.color, s.art],
       );
       for (const [i, e] of s.episodes.entries())
@@ -245,10 +245,17 @@ for (const s of seasons) {
       if (!e.media_path) throw new Error('missing');
       await access(e.media_path);
     } catch {
-      await renderEpisode(e, s.color);
+      await renderEpisode(e, { color: s.color, style: 'captions', language: s.language });
     }
   }
 }
+// Earlier demo installs used the full-text card; move them to captions once.
+for (const s of await rows(
+  "UPDATE seasons SET style='captions' WHERE id=ANY($1::uuid[]) AND style='cards' RETURNING id,color,language",
+  [seasons.map((x) => x.id)],
+))
+  for (const e of await rows('SELECT * FROM episodes WHERE season_id=$1', [s.id]))
+    await renderEpisode(e, { color: s.color, style: 'captions', language: s.language });
 await db.query(
   await readFile(new URL('../db/007_demo_final_questions.sql', import.meta.url), 'utf8'),
 );

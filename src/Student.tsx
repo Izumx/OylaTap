@@ -531,6 +531,7 @@ export function Feed() {
                     <FeedVideo
                       clip={c}
                       context={c.reason || (today ? sourceLabel : undefined)}
+                      personal={Boolean(c.reason)}
                       active={i === active && !modal && !micro && !authOpen}
                       muted={muted}
                       onEnded={() => {
@@ -939,6 +940,7 @@ function ArrowUpRightIcon() {
 function FeedVideo({
   clip,
   context,
+  personal = false,
   active,
   muted,
   onEnded,
@@ -947,6 +949,7 @@ function FeedVideo({
 }: {
   clip: Clip;
   context?: string;
+  personal?: boolean;
   active: boolean;
   muted: boolean;
   onEnded: () => void;
@@ -954,6 +957,11 @@ function FeedVideo({
   onReport: () => void;
 }) {
   const { t, user } = useApp();
+  // Demo topics belong to the platform; an author's lesson always carries the author's name.
+  const authorName =
+    clip.season.owner_role !== 'creator' && clip.season.source_name?.startsWith('Демонстрационные')
+      ? 'OylaTap'
+      : clip.season.owner_name || 'OylaTap';
   const ref = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false),
     [time, setTime] = useState(0),
@@ -1061,28 +1069,34 @@ function FeedVideo({
         </div>
       )}
       <div className="video-bottom">
-        {context && <p className="video-context">{context}</p>}
+        {/* The session label above the player already names the source on wide screens;
+            a personal reason is new information everywhere. */}
+        {context && (
+          <p className={`video-context ${personal ? 'is-reason' : 'is-source'}`}>
+            {personal && <Sparkles size={13} />}
+            {context}
+          </p>
+        )}
         <div className="creator">
-          <span className="creator-avatar">{(clip.season.owner_name || 'O').slice(0, 1)}</span>
+          <span className="creator-avatar">{authorName.slice(0, 1)}</span>
           <span>
-            {clip.season.source_name?.startsWith('Демонстрационные')
-              ? 'OylaTap'
-              : clip.season.owner_name || 'OylaTap'}{' '}
-            {clip.season.owner_trust === 'trusted' && <CheckCheck size={16} />}
+            {authorName} {clip.season.owner_trust === 'trusted' && <CheckCheck size={16} />}
           </span>
           <span className="video-language">
             {clip.season.language === 'kk' ? 'Қазақша' : 'Русский'}
           </span>
         </div>
         <h2>{clip.episode.title}</h2>
-        <Link to={`/learn/${clip.season.id}`} className="video-season-link">
-          <BookOpen size={14} />
-          {clip.season.title}
-        </Link>
-        <button className="video-report" onClick={onReport} aria-label="Сообщить об ошибке">
-          <Flag size={13} />
-          {t('Нашёл ошибку?', 'Қате таптың ба?')}
-        </button>
+        <div className="video-meta-row">
+          <Link to={`/learn/${clip.season.id}`} className="video-season-link">
+            <BookOpen size={14} />
+            {clip.season.title}
+          </Link>
+          <button className="video-report" onClick={onReport} aria-label="Сообщить об ошибке">
+            <Flag size={13} />
+            {t('Ошибка?', 'Қате?')}
+          </button>
+        </div>
         {pct >= 98 && (
           <button className="button primary video-quiz" onClick={onQuiz}>
             {t('Что ты понял? Проверим', 'Түсінгеніңді тексерейік')}

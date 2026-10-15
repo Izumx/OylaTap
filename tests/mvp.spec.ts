@@ -200,7 +200,7 @@ test('class code joins student; tests and assignments appear in teacher report',
     },
   });
   expect(assigned.ok()).toBe(true);
-  const student = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const student = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await account(student, 'student');
   expect((await student.post('/api/classes/join', { data: { code } })).ok()).toBe(true);
   expect((await (await student.get('/api/assignments')).json())[0].class_name).toBe('7 Б — тест');
@@ -228,7 +228,7 @@ test('audio recording, teacher review, student playback and deletion', async ({
   page,
   playwright,
 }) => {
-  const teacher = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const teacher = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await account(teacher, 'teacher');
   const c = await (await teacher.post('/api/classes', { data: { name: '7 В — голос' } })).json();
   await teacher.post('/api/assignments', {
@@ -269,7 +269,7 @@ test('audio recording, teacher review, student playback and deletion', async ({
   await page.goto('/profile');
   await expect(page.locator('.retelling-card')).toContainText('85%');
   await expect(page.locator('.retelling-card')).toContainText('Добавь последствия');
-  const denied = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const denied = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await account(denied, 'teacher');
   expect((await denied.get(`/api/retellings/${report.retelling_id}/audio`)).status()).toBe(404);
   await denied.dispose();
@@ -305,7 +305,7 @@ test('access control, no answer leaks, CSRF and publication prerequisites', asyn
       })
     ).status(),
   ).toBe(403);
-  const other = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const other = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await account(other, 'teacher');
   expect((await other.get(`/api/seasons/${id}`)).status()).toBe(404);
   expect((await other.post(`/api/seasons/${id}/render`)).status()).toBe(404);
@@ -333,7 +333,7 @@ test('published teacher seasons are private to assigned classes by default', asy
   expect(
     (await page.request.post(`/api/seasons/${id}/publish`, { data: { confirmed: true } })).ok(),
   ).toBe(true);
-  const student = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const student = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await account(student, 'student');
   expect((await student.get(`/api/seasons/${id}`)).status()).toBe(404);
   expect((await student.get(`/api/episodes/${s.episodes[0].id}/video`)).status()).toBe(404);
@@ -397,7 +397,7 @@ test('personal topic preferences persist and teacher topic takes priority for th
   let today = await (await page.request.get('/api/today')).json();
   expect(today.season_id).toBe('10000000-0000-4000-8000-000000000003');
   expect(today.topic_source).toBe('personal');
-  const teacher = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000' });
+  const teacher = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3100' });
   await account(teacher, 'teacher');
   const c = await (
     await teacher.post('/api/classes', { data: { name: 'Класс с текущей темой' } })

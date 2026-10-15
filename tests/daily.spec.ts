@@ -5,7 +5,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import { hashPassword, tokenHash } from '../server/auth';
 
-const baseURL = 'http://127.0.0.1:3000';
+const baseURL = 'http://127.0.0.1:3100';
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const seed = '10000000-0000-4000-8000-000000000001';
 const users: string[] = [];

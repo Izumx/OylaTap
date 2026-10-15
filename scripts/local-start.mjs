@@ -81,9 +81,9 @@ try {
   );
   console.log('Node.js, Docker Compose и FFmpeg доступны.');
   if (checkOnly) process.exit(0);
-  if (await healthy(3000)) {
-    console.log('OylaTap уже работает: http://127.0.0.1:3000');
-    openBrowser('http://127.0.0.1:3000');
+  if (await healthy(3100)) {
+    console.log('OylaTap уже работает: http://127.0.0.1:3100');
+    openBrowser('http://127.0.0.1:3100');
     process.exit(0);
   }
   mkdirSync('.local', { recursive: true });
@@ -116,7 +116,7 @@ try {
   const { config } = await import('dotenv');
   const settings = config({ quiet: true }).parsed || {};
   if ((process.env.DEMO_MODE || settings.DEMO_MODE) === 'true') await run(npm, ['run', 'db:seed']);
-  let port = 3000;
+  let port = 3100;
   if (await healthy(port)) {
     console.log(`OylaTap уже работает: http://127.0.0.1:${port}`);
     openBrowser(`http://127.0.0.1:${port}`);
@@ -124,7 +124,7 @@ try {
   }
   while (!(await free(port))) {
     if (++port > 3010)
-      throw new Error('Порты 3000–3010 заняты. Закройте другие серверы и повторите запуск.');
+      throw new Error('Порты 3100–3110 заняты. Закройте другие серверы и повторите запуск.');
   }
   const child = start(npm, ['run', 'dev'], {
     cwd: root,
