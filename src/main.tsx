@@ -5,9 +5,12 @@ import { Provider } from './lib';
 import { Shell, Private } from './components';
 import Auth from './Auth';
 import { ReminderTicker } from './Learning';
+import { SeasonPage } from './SeasonPage';
+import { HistoryPage, AttemptPage, PracticePage } from './Assessments';
 import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from './Student';
 import { StudioPage, EditorPage, ClassesPage, ResultsPage } from './Teacher';
 import './style.css';
+import './comfort.css';
 function App() {
   const loc = useLocation();
   return (
@@ -16,6 +19,31 @@ function App() {
         <Route path="/" element={<Feed />} />
         <Route path="/watch/:id" element={<Feed />} />
         <Route path="/library" element={<LibraryPage />} />
+        <Route path="/learn/:id" element={<SeasonPage />} />
+        <Route
+          path="/attempts"
+          element={
+            <Private>
+              <HistoryPage />
+            </Private>
+          }
+        />
+        <Route
+          path="/attempts/:id"
+          element={
+            <Private>
+              <AttemptPage />
+            </Private>
+          }
+        />
+        <Route
+          path="/attempts/:id/practice"
+          element={
+            <Private>
+              <PracticePage />
+            </Private>
+          }
+        />
         <Route
           path="/assignments"
           element={

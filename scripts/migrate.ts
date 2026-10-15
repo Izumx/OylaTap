@@ -12,6 +12,9 @@ try {
     '002_retelling_consent',
     '003_season_visibility',
     '004_daily_learning',
+    '005_daily_sessions',
+    '006_assessment_history',
+    '007_demo_final_questions',
   ]) {
     if (
       !(await client.query('SELECT name FROM schema_migrations WHERE name=$1', [name])).rowCount

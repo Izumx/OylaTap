@@ -21,6 +21,7 @@ import {
 } from './auth.js';
 import { dataDir, renderSeason } from './render.js';
 import { dailyRouter } from './daily.js';
+import { assessmentsRouter } from './assessments.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
 
 const app = express();
@@ -91,6 +92,7 @@ const publicUser = (u: any) => ({
   language: u.language,
 });
 app.use('/api', dailyRouter(visibilitySql));
+app.use('/api', assessmentsRouter(visibilitySql));
 app.get('/api/health', async (req, res) => {
   await db.query('SELECT 1');
   res.json({ ok: true, database: 'PostgreSQL' });
@@ -182,7 +184,9 @@ const catalogSql = `SELECT s.id,s.title,s.description,s.subject,s.language,s.gra
  (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
  (SELECT coalesce(sum(duration),0)::int FROM episodes e WHERE e.season_id=s.id) duration,
  (SELECT count(*)::int FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) completed,
- (SELECT max(round(100.0*a.score/a.total))::int FROM attempts a WHERE a.season_id=s.id AND a.user_id=$1) best_score
+ (SELECT max(round(100.0*a.score/a.total))::int FROM assessment_attempts a WHERE a.season_id=s.id AND a.user_id=$1) best_score,
+ (SELECT round(100.0*a.score/a.total)::int FROM assessment_attempts a WHERE a.season_id=s.id AND a.user_id=$1 ORDER BY a.created_at DESC,a.id DESC LIMIT 1) last_score,
+ (SELECT round(100.0*a.score/a.total)::int FROM assessment_attempts a WHERE a.season_id=s.id AND a.user_id=$1 ORDER BY a.created_at DESC,a.id DESC LIMIT 1 OFFSET 1) previous_score
  FROM seasons s`;
 app.get('/api/catalog', async (req, res) =>
   res.json(
@@ -223,12 +227,12 @@ app.get('/api/seasons/:id', async (req, res) => {
     [id, req.user?.id || null],
   );
   const questions = await rows(
-    `SELECT id,position,prompt,options,episode_id,coalesce((SELECT position FROM episodes WHERE id=questions.episode_id),0) episode_position${owner ? ',correct,explanation' : ''} FROM questions WHERE season_id=$1 ORDER BY position`,
+    `SELECT id,position,purpose,prompt,options,episode_id,coalesce((SELECT position FROM episodes WHERE id=questions.episode_id),0) episode_position${owner ? ',correct,explanation' : ''} FROM questions WHERE season_id=$1 ORDER BY position`,
     [id],
   );
   const attempts = req.user
     ? await rows(
-        'SELECT id,score,total,created_at FROM attempts WHERE user_id=$1 AND season_id=$2 ORDER BY created_at DESC',
+        'SELECT id,kind,score,total,created_at FROM assessment_attempts WHERE user_id=$1 AND season_id=$2 ORDER BY created_at DESC,id DESC',
         [req.user.id, id],
       )
     : [];
@@ -242,7 +246,12 @@ app.get('/api/seasons/:id', async (req, res) => {
     ...s,
     source_text: owner ? s.source_text : undefined,
     episodes,
-    questions,
+    questions: owner
+      ? questions
+      : questions.some((q) => q.purpose === 'final')
+        ? questions.filter((q) => q.purpose === 'final')
+        : questions,
+    quiz_mode: questions.some((q) => q.purpose === 'final') ? 'final' : 'legacy',
     attempts,
     retellings,
   });
@@ -272,45 +281,16 @@ app.post('/api/episodes/:id/complete', required, async (req, res) => {
   );
   res.json({ ok: true });
 });
-app.post('/api/seasons/:id/attempts', required, async (req, res) => {
-  const id = uid.parse(req.params.id);
-  if (
-    !(await one(
-      "SELECT s.id FROM seasons s WHERE s.id=$2 AND s.status='published' AND " + visibilitySql,
-      [req.user!.id, id],
-    ))
-  )
-    notFound();
-  const { answers } = z
-    .object({ answers: z.array(z.number().int().min(0).max(5)).min(1).max(15) })
-    .parse(req.body);
-  const q = await rows('SELECT * FROM questions WHERE season_id=$1 ORDER BY position', [id]);
-  if (q.length !== answers.length) fail('Ответьте на все вопросы');
-  const results = q.map((v, i) => ({
-    id: v.id,
-    prompt: v.prompt,
-    options: v.options,
-    answer: answers[i],
-    correct: v.correct,
-    explanation: v.explanation,
-    passed: answers[i] === v.correct,
-  }));
-  const score = results.filter((x) => x.passed).length;
-  await db.query(
-    'INSERT INTO attempts(id,user_id,season_id,answers,score,total) VALUES($1,$2,$3,$4,$5,$6)',
-    [randomUUID(), req.user!.id, id, JSON.stringify(answers), score, q.length],
-  );
-  res.json({ score, total: q.length, results });
-});
 app.get('/api/progress', required, async (req, res) => {
   const id = req.user!.id;
   const stats = await one(
     `SELECT (SELECT count(*)::int FROM completions WHERE user_id=$1) watched,
-  (SELECT count(*)::int FROM attempts WHERE user_id=$1) tests,
+  (SELECT count(*)::int FROM attempts WHERE user_id=$1 AND kind<>'practice') tests,
+  (SELECT count(*)::int FROM attempts WHERE user_id=$1 AND kind='practice') practices,
   (SELECT count(*)::int FROM retellings WHERE user_id=$1) retellings,
   (SELECT count(DISTINCT episode_id)::int FROM micro_answers WHERE user_id=$1 AND passed) micro_correct,
-  (SELECT count(DISTINCT episode_id)::int*10 FROM micro_answers WHERE user_id=$1 AND passed)+(SELECT coalesce(sum(best),0)::int*10 FROM (SELECT max(score) best FROM attempts WHERE user_id=$1 GROUP BY season_id) b)+(SELECT count(*)::int*5 FROM retellings WHERE user_id=$1) xp,
-  (SELECT coalesce(round(avg(100.0*score/total)),0)::int FROM attempts WHERE user_id=$1) understanding`,
+  (SELECT count(DISTINCT episode_id)::int*10 FROM micro_answers WHERE user_id=$1 AND passed)+(SELECT coalesce(sum(best),0)::int*10 FROM (SELECT max(score) best FROM attempts WHERE user_id=$1 AND kind<>'practice' GROUP BY season_id) b)+(SELECT count(*)::int*5 FROM retellings WHERE user_id=$1) xp,
+  (SELECT round(avg(100.0*score/total))::int FROM (SELECT DISTINCT ON(season_id) score,total FROM assessment_attempts WHERE user_id=$1 ORDER BY season_id,created_at DESC,id DESC) latest) latest_test_average`,
     [id],
   );
   const activity = await rows(
@@ -379,7 +359,7 @@ app.get('/api/assignments', required, async (req, res) => {
       `SELECT a.*,c.name class_name,s.title,s.subject,s.color,s.art,s.language,
     (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
     (SELECT count(*)::int FROM completions p JOIN episodes e ON e.id=p.episode_id WHERE e.season_id=s.id AND p.user_id=$1) completed,
-    (SELECT max(round(100.0*t.score/t.total))::int FROM attempts t WHERE t.season_id=s.id AND t.user_id=$1) best_score
+    (SELECT max(round(100.0*t.score/t.total))::int FROM assessment_attempts t WHERE t.season_id=s.id AND t.user_id=$1) best_score
     FROM assignments a JOIN classrooms c ON c.id=a.class_id JOIN seasons s ON s.id=a.season_id
     WHERE ${req.user!.role === 'teacher' ? 'c.teacher_id=$1' : 'EXISTS(SELECT 1 FROM memberships m WHERE m.class_id=c.id AND m.user_id=$1)'} ORDER BY a.due_at`,
       [req.user!.id],
@@ -410,41 +390,59 @@ app.post('/api/assignments', required, teacher, async (req, res) => {
   );
   res.json(a);
 });
-const seasonData = z.object({
-  title: z.string().trim().min(3).max(100),
-  description: z.string().trim().min(5).max(500),
-  subject: z.enum(['kz-history', 'world-history', 'kz-literature', 'ru-literature']),
-  language: z.enum(['ru', 'kk']),
-  grade: z.number().int().min(5).max(11),
-  source_text: z.string().max(60000),
-  source_name: z.string().max(200).default('Материал учителя'),
-  episodes: z
-    .array(
-      z.object({
-        id: uid.optional(),
-        title: z.string().trim().min(2).max(100),
-        script: z.string().trim().min(10).max(500),
-      }),
-    )
-    .min(1)
-    .max(10),
-  questions: z
-    .array(
-      z
-        .object({
-          prompt: z.string().trim().min(5).max(300),
-          options: z.array(z.string().trim().min(1).max(200)).min(2).max(5),
-          episode_position: z.number().int().min(0).max(9).default(0),
-          correct: z.number().int().min(0).max(4),
-          explanation: z.string().trim().min(5).max(500),
-        })
-        .refine(
-          (q) => q.correct < q.options.length,
-          'Правильный ответ должен быть в списке вариантов',
-        ),
-    )
-    .max(15),
-});
+const seasonData = z
+  .object({
+    title: z.string().trim().min(3).max(100),
+    description: z.string().trim().min(5).max(500),
+    subject: z.enum(['kz-history', 'world-history', 'kz-literature', 'ru-literature']),
+    language: z.enum(['ru', 'kk']),
+    grade: z.number().int().min(5).max(11),
+    source_text: z.string().max(60000),
+    source_name: z.string().max(200).default('Материал учителя'),
+    episodes: z
+      .array(
+        z.object({
+          id: uid.optional(),
+          title: z.string().trim().min(2).max(100),
+          script: z.string().trim().min(10).max(500),
+        }),
+      )
+      .min(1)
+      .max(10),
+    questions: z
+      .array(
+        z
+          .object({
+            prompt: z.string().trim().min(5).max(300),
+            purpose: z.enum(['micro', 'final']).default('micro'),
+            options: z.array(z.string().trim().min(1).max(200)).min(2).max(5),
+            episode_position: z.number().int().min(0).max(9).default(0),
+            correct: z.number().int().min(0).max(4),
+            explanation: z.string().trim().min(5).max(500),
+          })
+          .refine(
+            (q) => q.correct < q.options.length,
+            'Правильный ответ должен быть в списке вариантов',
+          ),
+      )
+      .max(25),
+  })
+  .superRefine((data, ctx) => {
+    data.questions.forEach((q, i) => {
+      if (q.episode_position >= data.episodes.length)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['questions', i, 'episode_position'],
+          message: 'Выберите существующую серию',
+        });
+    });
+    if (data.questions.filter((q) => q.purpose === 'final').length > 15)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['questions'],
+        message: 'В итоговом тесте не больше 15 вопросов',
+      });
+  });
 async function owned(req: express.Request) {
   const s = await one('SELECT * FROM seasons WHERE id=$1 AND owner_id=$2', [
     uid.parse(req.params.id),
@@ -529,7 +527,7 @@ async function saveSeason(
     }
     for (const [i, q] of data.questions.entries())
       await c.query(
-        'INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+        'INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id,purpose) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
         [
           randomUUID(),
           id,
@@ -539,6 +537,7 @@ async function saveSeason(
           q.correct,
           q.explanation,
           episodeIds[q.episode_position] || null,
+          q.purpose,
         ],
       );
     await c.query('COMMIT');
@@ -608,17 +607,31 @@ app.post('/api/seasons/:id/publish', required, teacher, async (req, res) => {
         .rowCount
     )
       fail('Добавьте или соберите видео для каждой серии');
-    if (!(await c.query('SELECT 1 FROM questions WHERE season_id=$1', [s.id])).rowCount)
-      fail('Добавьте хотя бы один вопрос с объяснением');
+    if (
+      !(await c.query("SELECT 1 FROM questions WHERE season_id=$1 AND purpose='final'", [s.id]))
+        .rowCount
+    )
+      fail('Добавьте отдельные вопросы итогового теста');
     if (
       (
         await c.query(
-          'SELECT 1 FROM episodes e WHERE e.season_id=$1 AND NOT EXISTS(SELECT 1 FROM questions q WHERE q.episode_id=e.id)',
+          "SELECT 1 FROM episodes e WHERE e.season_id=$1 AND NOT EXISTS(SELECT 1 FROM questions q WHERE q.episode_id=e.id AND q.purpose='micro')",
           [s.id],
         )
       ).rowCount
     )
       fail('Добавьте микровопрос к каждой серии');
+    if (
+      (
+        await c.query(
+          `SELECT 1 FROM questions m JOIN questions f ON f.season_id=m.season_id
+      WHERE m.season_id=$1 AND m.purpose='micro' AND f.purpose='final'
+      AND lower(regexp_replace(trim(m.prompt),'\\s+',' ','g'))=lower(regexp_replace(trim(f.prompt),'\\s+',' ','g'))`,
+          [s.id],
+        )
+      ).rowCount
+    )
+      fail('Итоговый вопрос должен отличаться от микровопроса');
     await c.query(
       "UPDATE seasons SET status='published',visibility=$2,updated_at=now() WHERE id=$1",
       [s.id, d.visibility],
@@ -790,7 +803,7 @@ async function resultsForTeacher(id: string) {
     (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
     (SELECT count(*)::int FROM completions p JOIN episodes e ON e.id=p.episode_id WHERE e.season_id=s.id AND p.user_id=u.id) watched,
     (SELECT count(DISTINCT ma.episode_id)::int FROM micro_answers ma JOIN episodes e ON e.id=ma.episode_id WHERE e.season_id=s.id AND ma.user_id=u.id AND ma.passed) micro_correct,
-    (SELECT max(round(100.0*t.score/t.total))::int FROM attempts t WHERE t.season_id=s.id AND t.user_id=u.id) test_score,
+    (SELECT max(round(100.0*t.score/t.total))::int FROM assessment_attempts t WHERE t.season_id=s.id AND t.user_id=u.id) test_score,
     r.id retelling_id,r.teacher_score,r.feedback,r.transcript,r.created_at retelling_at
     FROM classrooms c JOIN memberships m ON m.class_id=c.id JOIN users u ON u.id=m.user_id
     JOIN assignments a ON a.class_id=c.id JOIN seasons s ON s.id=a.season_id
@@ -811,7 +824,7 @@ app.get('/api/results.csv', required, teacher, async (req, res) => {
       .replaceAll('"', '""') +
     '"';
   const csv = [
-    'Класс;Ученик;Сезон;Просмотрено;Серий;Верные микровопросы;Тест %;Пересказ %;Комментарий',
+    'Класс;Ученик;Сезон;Просмотрено;Серий;Верные микровопросы;Лучший тест %;Пересказ %;Комментарий',
     ...list.map((r) =>
       [
         r.class_name,

@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { db } from '../server/db';
 const seed = '10000000-0000-4000-8000-000000000001';
 const createdUsers: string[] = [];
@@ -40,6 +41,17 @@ async function draft(request: APIRequestContext) {
           options: ['Только дата', 'Причины и последствия', 'Только имя'],
           correct: 1,
           explanation: 'Связь причин и последствий помогает объяснить событие.',
+        },
+        {
+          purpose: 'final',
+          prompt: 'Как объяснить последствия исторического события?',
+          options: [
+            'Назвать только дату',
+            'Связать причины и последующие изменения',
+            'Назвать только имя',
+          ],
+          correct: 1,
+          explanation: 'Объяснение связывает причины, событие и последующие изменения.',
         },
       ],
     },
@@ -91,14 +103,18 @@ test('quiz grades on server, explains mistakes, persists progress in PostgreSQL'
   await page.goto(`/watch/${seed}`);
   await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
   const d = page.getByRole('dialog');
-  await d.getByRole('button', { name: 'A Создало условия для объединения' }).click();
+  await d
+    .getByRole('button', { name: 'A Недовольство подтолкнуло людей искать новые условия' })
+    .click();
   await d.getByRole('button', { name: 'Дальше' }).click();
-  await d.getByRole('button', { name: 'A Абылай и Кенесары' }).click();
+  await d.getByRole('button', { name: 'A Оно заменило любые решения племён' }).click();
   await d.getByRole('button', { name: 'Дальше' }).click();
-  await d.getByRole('button', { name: 'A В Жетысу' }).click();
+  await d
+    .getByRole('button', { name: 'A Связать причины переселения и последующее объединение' })
+    .click();
   await d.getByRole('button', { name: 'Показать результат' }).click();
   await expect(d.locator('.quiz-result h3')).toHaveText('2 из 3');
-  await expect(d.locator('.wrong')).toContainText('Керей и Жанибек');
+  await expect(d.locator('.wrong')).toContainText('Земли дали условия для нового объединения');
   await d.getByRole('button', { name: 'Закрыть', exact: true }).click();
   await page.goto('/progress');
   await expect(page.locator('.stat-card').nth(1)).toContainText('1');
@@ -125,7 +141,7 @@ test('teacher imports material, edits quiz, renders, previews and publishes', as
   await expect(page.getByLabel('Или вставьте текст')).toContainText('Историческое событие');
   await page.getByRole('button', { name: 'Подготовить серии' }).click();
   await page.getByLabel('Название серии').fill('Почему меняется общество');
-  await page.getByRole('button', { name: 'Вопрос', exact: true }).click();
+  await page.getByRole('button', { name: 'Микровопрос', exact: true }).click();
   await page.getByLabel('Формулировка', { exact: true }).fill('Как понять историческое событие?');
   await page.getByLabel('A', { exact: true }).fill('Запомнить одну дату');
   await page.getByLabel('B', { exact: true }).fill('Связать причины и последствия');
@@ -134,6 +150,20 @@ test('teacher imports material, edits quiz, renders, previews and publishes', as
   await page
     .getByLabel('Объяснение после ответа')
     .fill('Связь причин и последствий помогает объяснить событие.');
+  await page.getByRole('button', { name: 'Итоговый вопрос', exact: true }).click();
+  const finalQuestion = page.locator('.question-editor').last();
+  await finalQuestion
+    .getByLabel('Формулировка', { exact: true })
+    .fill('Как объяснить изменения в обществе?');
+  await finalQuestion.getByLabel('A', { exact: true }).fill('Назвать одну дату');
+  await finalQuestion
+    .getByLabel('B', { exact: true })
+    .fill('Показать причины и последующие изменения');
+  await finalQuestion.getByLabel('C', { exact: true }).fill('Не учитывать события');
+  await finalQuestion.getByLabel('Правильный ответ', { exact: true }).selectOption('1');
+  await finalQuestion
+    .getByLabel('Объяснение после ответа')
+    .fill('Объяснение связывает причины и изменения.');
   await page.getByRole('button', { name: 'К видео', exact: true }).click();
   await expect(page).toHaveURL(/\/studio\/[0-9a-f-]+$/);
   await page.getByRole('button', { name: 'Собрать карточки', exact: true }).click();
@@ -177,6 +207,15 @@ test('class code joins student; tests and assignments appear in teacher report',
   expect(
     (await student.post(`/api/seasons/${seed}/attempts`, { data: { answers: [0, 1, 0] } })).ok(),
   ).toBe(true);
+  await page.goto('/classes');
+  const openTopic = page
+    .locator('.teacher-assignments')
+    .getByRole('link', { name: 'Открыть', exact: true });
+  await expect(openTopic).toHaveAttribute('href', `/learn/${seed}`);
+  await openTopic.click();
+  await expect(
+    page.getByRole('heading', { name: 'Как появилось Казахское ханство', exact: true }),
+  ).toBeVisible();
   await page.goto('/results');
   await expect(page.locator('tbody')).toContainText('100%');
   await expect(page.locator('tbody')).toContainText('Тестовый ученик');
@@ -354,7 +393,7 @@ test('personal topic preferences persist and teacher topic takes priority for th
     .getByRole('combobox', { name: 'Моя текущая тема' })
     .selectOption('10000000-0000-4000-8000-000000000003');
   await page.getByRole('button', { name: 'Сохранить учебный план', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Учебный план сохранён');
+  await expect(page.getByRole('status').filter({ hasText: 'Учебный план сохранён' })).toBeVisible();
   let today = await (await page.request.get('/api/today')).json();
   expect(today.season_id).toBe('10000000-0000-4000-8000-000000000003');
   expect(today.topic_source).toBe('personal');
@@ -373,4 +412,158 @@ test('personal topic preferences persist and teacher topic takes priority for th
   expect(pref.current_season_id).toBe('10000000-0000-4000-8000-000000000003');
   expect(pref.reminder_enabled).toBe(false);
   await teacher.dispose();
+});
+
+test('topic journey resumes unwatched video, reviews a quiz mistake and keeps progress after reload', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await account(page.request, 'student');
+  const season = await (await page.request.get(`/api/seasons/${seed}`)).json();
+  await page.request.post(`/api/episodes/${season.episodes[0].id}/complete`);
+  await page.goto('/library');
+  await page.locator(`.season-card[href="/learn/${seed}"]`).click();
+  await expect(page.getByRole('heading', { name: 'Твой маршрут по теме' })).toBeVisible();
+  await expect(page.locator('.journey-steps li').nth(0)).toContainText('1/3 просмотрено');
+  const resume = page.getByRole('link', { name: 'Продолжить просмотр', exact: true });
+  await expect(resume).toHaveAttribute('href', `/watch/${seed}?episode=1`);
+  await resume.click();
+  for (const [index, answer] of [
+    [1, 'B Керей и Жанибек'],
+    [2, 'A В Жетысу'],
+  ] as const) {
+    const video = page.locator('.feed-slide video').nth(index);
+    await expect
+      .poll(() => video.evaluate((el: HTMLVideoElement) => el.currentTime))
+      .toBeGreaterThan(0);
+    await video.evaluate((el: HTMLVideoElement) => {
+      el.currentTime = el.duration - 0.15;
+    });
+    const micro = page.getByRole('dialog', { name: 'Один вопрос — и дальше' });
+    await expect(micro).toBeVisible();
+    await micro.getByRole('button', { name: answer, exact: true }).click();
+    await micro.getByRole('button', { name: 'Проверить', exact: true }).click();
+    await expect(micro).toContainText('Ответ верный!');
+    await micro.getByRole('button', { name: 'Дальше по маршруту' }).click();
+  }
+  await expect(page.locator('.session-end')).toBeInViewport();
+  await page.getByRole('button', { name: 'Закрепить тему: пройти тест' }).click();
+  const quiz = page.getByRole('dialog', { name: 'Проверь понимание' });
+  await quiz
+    .getByRole('button', { name: 'A Недовольство подтолкнуло людей искать новые условия' })
+    .click();
+  await quiz.getByRole('button', { name: 'Дальше', exact: true }).click();
+  await quiz.getByRole('button', { name: 'A Оно заменило любые решения племён' }).click();
+  await quiz.getByRole('button', { name: 'Дальше', exact: true }).click();
+  await quiz
+    .getByRole('button', { name: 'A Связать причины переселения и последующее объединение' })
+    .click();
+  await quiz.getByRole('button', { name: 'Показать результат' }).click();
+  await expect(quiz.locator('.quiz-result h3')).toHaveText('2 из 3');
+  await quiz.getByRole('button', { name: 'Повторить серию: Новое начало в Жетысу' }).click();
+  await expect(page).toHaveURL(new RegExp(`/watch/${seed}\\?episode=1$`));
+  await expect(page.locator('.chapter-list>button.active b')).toHaveText('Новое начало в Жетысу');
+  await page.goto(`/learn/${seed}`);
+  await page.reload();
+  await expect(page.locator('.journey-steps li').nth(0)).toContainText('3/3 просмотрено');
+  await expect(page.locator('.journey-steps li').nth(1)).toContainText(
+    'Последний результат: 2 из 3',
+  );
+  await page.getByRole('button', { name: 'Рассказать', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Начать запись', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect(page.locator('.journey-steps li').nth(2)).toContainText(
+    'Голосом, с текстовым дополнением',
+  );
+  await mkdir('.local/qa', { recursive: true });
+  await page.screenshot({ path: '.local/qa/learning-route-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('heading', { name: 'Твой маршрут по теме' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '.local/qa/learning-route-mobile.png', fullPage: true });
+  await page.goto('/progress');
+  await expect(page.locator('.continue-topic')).toContainText('Повтори сложное');
+  await page.locator('.continue-topic').click();
+  await expect(page).toHaveURL(`/learn/${seed}`);
+  expect(errors).toEqual([]);
+});
+
+test('guest can explore a topic, and test entry asks for login without recording progress', async ({
+  page,
+}) => {
+  await page.goto(`/learn/${seed}`);
+  await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Войти');
+  expect((await page.request.get('/api/progress')).status()).toBe(401);
+});
+
+test('quiet feed keeps focus and appearance preferences, and supports pause and keyboard seeking', async ({
+  page,
+}) => {
+  await page.goto(`/watch/${seed}`);
+  const video = page.locator('.feed-slide video').first();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  await expect(page.locator('html')).toHaveAttribute('data-comfort', 'soft');
+  await expect(page.locator('.season-panel')).toBeHidden();
+  await page.getByRole('button', { name: 'Режим фокуса', exact: true }).click();
+  await expect(page.locator('.season-panel')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.season-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Режим фокуса', exact: true }).click();
+  await page.getByRole('button', { name: 'Спокойный режим', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-comfort', 'contrast');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-comfort', 'contrast');
+  await page.getByRole('button', { name: 'Спокойный режим', exact: true }).click();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  await page.locator('.feed-scroll').focus();
+  await page.keyboard.press('Space');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  const seek = page.locator('.feed-slide').first().getByRole('slider', { name: 'Позиция видео' });
+  await seek.press('Home');
+  await seek.press('ArrowRight');
+  await seek.press('ArrowRight');
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeCloseTo(0.2, 1);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await page.locator('.feed-scroll').focus();
+  await page.keyboard.press('Space');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
+  await mkdir('.local/qa', { recursive: true });
+  await page.screenshot({ path: '.local/qa/feed-comfort-desktop.png' });
+});
+
+test('phone feed fills the screen, keeps controls reachable and does not overflow', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/watch/${seed}`);
+  const video = page.locator('.feed-slide video').first();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  await expect(page.locator('.mobile-header')).toBeHidden();
+  await expect(page.locator('.bottom-nav')).toBeVisible();
+  for (const name of ['Содержание сезона', 'Пройти тест', 'Записать пересказ', 'Включить звук']) {
+    const box = await page.getByRole('button', { name, exact: true }).boundingBox();
+    expect(box).toBeTruthy();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(776);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await mkdir('.local/qa', { recursive: true });
+  await page.screenshot({ path: '.local/qa/feed-comfort-mobile.png' });
+  await page.setViewportSize({ width: 360, height: 740 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(
+    page.getByRole('button', { name: 'Записать пересказ', exact: true }),
+  ).toBeInViewport();
 });

@@ -1294,7 +1294,7 @@ svg {
   grid-template-columns: 1fr 1fr;
   gap: 15px;
 }
-input:not([type='checkbox']):not([type='file']),
+input:not([type='checkbox']):not([type='file']):not([type='range']),
 select,
 textarea {
   width: 100%;
@@ -3179,11 +3179,14 @@ td .muted {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
   padding: 32px 25px;
   background: linear-gradient(155deg, #253c26, #142317);
   overflow: auto;
+}
+.session-end > * {
+  flex-shrink: 0;
 }
 .end-orbit {
   width: 80px;
@@ -3381,5 +3384,372 @@ td .muted {
   }
   .session-end .text-button {
     font-size: 11px;
+  }
+}
+
+/* A topic keeps watching, checking and retelling visible as separate steps. */
+.topic-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 28px;
+}
+.topic-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 38px;
+  align-items: center;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(130deg, #202a20, #181b1b);
+}
+.topic-intro {
+  min-width: 0;
+}
+.topic-meta,
+.topic-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  font-size: 12px;
+}
+.topic-meta {
+  color: #a8b6a2;
+  margin-bottom: 16px;
+}
+.topic-meta > span + span:before {
+  content: '·';
+  margin-right: 12px;
+}
+.topic-intro h1 {
+  font-size: 36px;
+  max-width: 650px;
+  overflow-wrap: anywhere;
+}
+.topic-intro > p {
+  color: #b2bbb0;
+  line-height: 1.8;
+  font-size: 14px;
+  margin-bottom: 21px;
+}
+.topic-facts {
+  margin-bottom: 24px;
+  color: #bdc8b5;
+}
+.topic-facts > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.topic-cover {
+  overflow: hidden;
+  border-radius: 18px;
+  transform: rotate(2deg);
+}
+.topic-cover .season-art {
+  display: block;
+  width: 100%;
+}
+.topic-save-note {
+  display: block;
+  max-width: 360px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  margin-top: 14px;
+}
+.topic-journey,
+.topic-episodes {
+  margin-top: 32px;
+}
+.journey-steps {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.journey-steps > li {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 17px;
+  align-items: start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  padding: 22px;
+}
+.journey-steps > li.current {
+  border-color: #6d8750;
+  background: #20291e;
+}
+.journey-number {
+  height: 34px;
+  width: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #465041;
+  font-size: 13px;
+  font-weight: 700;
+  color: #acb8a4;
+}
+.journey-steps .done .journey-number {
+  background: var(--mint);
+  color: var(--ink);
+  border-color: var(--mint);
+}
+.journey-steps .current .journey-number {
+  border-color: var(--mint);
+  color: var(--mint);
+}
+.journey-steps h3 {
+  font-size: 17px;
+  margin-bottom: 7px;
+}
+.journey-steps p {
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: #c0c9ba;
+}
+.journey-steps small {
+  color: var(--muted);
+  line-height: 1.7;
+  display: block;
+  font-size: 12px;
+}
+.journey-steps .text-button {
+  align-self: center;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+}
+.topic-episode-list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  overflow: hidden;
+}
+.topic-episode-list > button {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 21px;
+  background: var(--panel);
+  text-align: left;
+  min-width: 0;
+}
+.topic-episode-list > button + button {
+  border-top: 1px solid var(--line);
+}
+.topic-episode-list > button:hover {
+  background: #222923;
+}
+.episode-status {
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #9da996;
+  width: 34px;
+  flex-shrink: 0;
+}
+.completed .episode-status {
+  color: var(--mint);
+}
+.topic-episode-list > button > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.topic-episode-list strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.topic-episode-list small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+.topic-episode-list > button > svg {
+  color: var(--mint);
+}
+.topic-source {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+  margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+.topic-source > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.card-test-result {
+  color: var(--mint);
+  font-size: 11px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.review-episode {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+  margin-top: 12px;
+  line-height: 1.6;
+}
+.quiz-progress-link {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+}
+.continue-topic {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 23px;
+  border: 1px solid #556d42;
+  border-radius: 18px;
+  background: #202b1d;
+  margin: 24px 0;
+}
+.continue-topic > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.continue-topic small {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: var(--mint);
+}
+.continue-topic strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.5;
+  margin: 7px 0;
+  overflow-wrap: anywhere;
+}
+.continue-topic span > span {
+  font-size: 12px;
+  color: #aebca4;
+}
+.continue-icon {
+  height: 46px;
+  width: 46px;
+  border-radius: 13px;
+  background: #c1f17d15;
+  display: grid;
+  place-items: center;
+  color: var(--mint);
+  flex-shrink: 0;
+}
+.session-next {
+  width: 100%;
+  margin-bottom: 18px;
+}
+.session-next .text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+@media (max-width: 1000px) {
+  .topic-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .topic-cover {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .topic-hero {
+    padding: 23px 20px;
+    border-radius: 18px;
+  }
+  .topic-intro h1 {
+    font-size: 28px;
+  }
+  .topic-intro > p {
+    font-size: 13px;
+  }
+  .topic-intro > .button {
+    width: 100%;
+  }
+  .topic-meta,
+  .topic-facts {
+    font-size: 11px;
+    gap: 9px 12px;
+  }
+  .topic-meta > span + span:before {
+    margin-right: 8px;
+  }
+  .topic-back {
+    margin-bottom: 20px;
+  }
+  .topic-journey .section-heading {
+    align-items: start;
+  }
+  .topic-journey .section-heading > span {
+    font-size: 10px;
+  }
+  .journey-steps > li {
+    padding: 18px 16px;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .journey-number {
+    width: 29px;
+    height: 29px;
+  }
+  .journey-steps h3 {
+    font-size: 15px;
+  }
+  .journey-steps p {
+    font-size: 12px;
+  }
+  .journey-steps small {
+    font-size: 11px;
+  }
+  .journey-steps .text-button {
+    grid-column: 2;
+    justify-self: start;
+    padding: 0;
+  }
+  .topic-episode-list > button {
+    padding: 18px 12px;
+    gap: 10px;
+  }
+  .topic-episode-list strong {
+    font-size: 13px;
+  }
+  .continue-topic {
+    padding: 18px 15px;
+    gap: 12px;
+  }
+  .continue-topic strong {
+    font-size: 15px;
+  }
+  .continue-topic .continue-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .card-test-result {
+    font-size: 9px;
   }
 }

@@ -3,83 +3,18 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db, rows, one } from './db.js';
 import { required, teacher } from './auth.js';
+import { dailyPlan } from './daily-plan.js';
 const uid = z.string().uuid();
 const day = "(now() AT TIME ZONE 'Asia/Qyzylorda')::date";
 export function dailyRouter(visibilitySql: string) {
   const router = Router();
   router.get('/today', async (req, res) => {
-    const mode = req.query.mode === 'free' ? 'free' : 'school',
-      userId = req.user?.id || null;
-    const visible = await rows(
-      "SELECT s.* FROM seasons s WHERE s.status='published' AND " +
-        visibilitySql +
-        ' ORDER BY s.created_at,s.id',
-      [userId],
-    );
-    const preferences = userId
-      ? await one('SELECT current_season_id,interests FROM users WHERE id=$1', [userId])
-      : null;
-    let topicId = preferences?.current_season_id,
-      topicSource = topicId ? 'personal' : 'library';
-    if (mode === 'school' && userId) {
-      const current = await one(
-        `SELECT c.current_season_id FROM classrooms c JOIN memberships m ON m.class_id=c.id WHERE m.user_id=$1 AND c.current_season_id IS NOT NULL ORDER BY c.created_at DESC LIMIT 1`,
-        [userId],
-      );
-      const assigned = await one(
-        'SELECT a.season_id FROM assignments a JOIN memberships m ON m.class_id=a.class_id WHERE m.user_id=$1 ORDER BY a.due_at LIMIT 1',
-        [userId],
-      );
-      if (current || assigned) {
-        topicId = current?.current_season_id || assigned?.season_id;
-        topicSource = 'class';
-      }
-    }
-    if (mode === 'free' && userId) {
-      const weak = await one(
-        'SELECT season_id FROM attempts WHERE user_id=$1 GROUP BY season_id HAVING max(100.0*score/total)<70 ORDER BY max(100.0*score/total) LIMIT 1',
-        [userId],
-      );
-      if (weak && visible.some((s) => s.id === weak.season_id)) {
-        topicId = weak.season_id;
-        topicSource = 'review';
-      }
-    }
-    visible.sort(
-      (a, b) =>
-        Number(b.id === topicId) - Number(a.id === topicId) ||
-        Number(b.language === req.user?.language) - Number(a.language === req.user?.language) ||
-        Number(b.grade === req.user?.grade) - Number(a.grade === req.user?.grade) ||
-        Number(preferences?.interests?.includes(b.subject) || false) -
-          Number(preferences?.interests?.includes(a.subject) || false),
-    );
-    const season = visible[0];
-    if (!season) {
-      res.json({ season_id: null, episode_ids: [], goal: 0, correct: 0, mode });
-      return;
-    }
-    const eps = await rows('SELECT id FROM episodes WHERE season_id=$1 ORDER BY position LIMIT 3', [
-      season.id,
-    ]);
-    const stats = await one(
-      `SELECT count(DISTINCT episode_id)::int correct,array_agg(DISTINCT episode_id) correct_ids FROM micro_answers WHERE user_id=$1 AND episode_id=ANY($2::uuid[]) AND passed=true AND (created_at AT TIME ZONE 'Asia/Qyzylorda')::date=${day}`,
-      [userId, eps.map((e) => e.id)],
-    );
-    res.json({
-      season_id: season.id,
-      episode_ids: eps.map((e) => e.id),
-      goal: eps.length,
-      correct: stats?.correct || 0,
-      correct_ids: stats?.correct_ids || [],
-      mode,
-      topic_source: topicSource,
-      topic: season.title,
-      tomorrow: season.title,
-    });
+    const mode = req.query.mode === 'free' ? 'free' : 'school';
+    res.json(await dailyPlan(req.user, mode, visibilitySql));
   });
   router.get('/episodes/:id/micro', async (req, res) => {
     const q = await one(
-      `SELECT q.id,q.prompt,q.options FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
+      `SELECT q.id,q.prompt,q.options FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND q.purpose='micro' AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
       [req.user?.id || null, uid.parse(req.params.id)],
     );
     if (!q) {
@@ -92,7 +27,7 @@ export function dailyRouter(visibilitySql: string) {
     const id = uid.parse(req.params.id),
       { answer } = z.object({ answer: z.number().int().min(0).max(4) }).parse(req.body);
     const q = await one(
-      `SELECT q.* FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
+      `SELECT q.* FROM questions q JOIN episodes e ON e.id=q.episode_id JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND q.purpose='micro' AND s.status='published' AND ${visibilitySql} ORDER BY q.position LIMIT 1`,
       [req.user?.id || null, id],
     );
     if (!q || answer >= q.options.length) {

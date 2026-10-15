@@ -1,5 +1,5 @@
 import { randomUUID, randomBytes } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { db, one, rows } from '../server/db.js';
 import { hashPassword } from '../server/auth.js';
 import { renderEpisode } from '../server/render.js';
@@ -247,6 +247,9 @@ for (const s of seasons) {
     }
   }
 }
+await db.query(
+  await readFile(new URL('../db/007_demo_final_questions.sql', import.meta.url), 'utf8'),
+);
 const classId = '20000000-0000-4000-8000-000000000001';
 await db.query(
   "INSERT INTO classrooms(id,teacher_id,name,code,current_season_id) VALUES($1,$2,'7 А · История и литература','OYLA7A',$3) ON CONFLICT(id) DO NOTHING",

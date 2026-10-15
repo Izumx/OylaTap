@@ -24,12 +24,32 @@ export type Episode = {
   completed: boolean;
 };
 export type Question = {
+  purpose?: 'micro' | 'final';
   episode_position?: number;
   id?: string;
   prompt: string;
   options: string[];
   correct?: number;
   explanation?: string;
+};
+export type DailySession = {
+  season_id: string | null;
+  episode_ids: string[];
+  goal: number;
+  correct: number;
+  correct_ids?: string[];
+  completed_ids?: string[];
+  session_complete?: boolean;
+  session_date: string;
+  mode: 'school' | 'free';
+  topic_source?: 'class' | 'assignment' | 'personal' | 'review' | 'library';
+  class_name?: string | null;
+  topic?: string;
+  is_review?: boolean;
+  route_done?: number;
+  route_total?: number;
+  next_episode?: { id: string; title: string; position: number } | null;
+  next_step?: 'continue' | 'quiz' | 'retelling' | 'complete';
 };
 export type Season = {
   id: string;
@@ -45,6 +65,9 @@ export type Season = {
   duration: number;
   completed: number;
   best_score: number | null;
+  last_score?: number | null;
+  previous_score?: number | null;
+  quiz_mode?: 'final' | 'legacy';
   source_name: string;
   source_text?: string;
   render_error?: string;
@@ -53,6 +76,11 @@ export type Season = {
   attempts?: any[];
   retellings?: any[];
 };
+export function testQuestions(season: Season) {
+  const questions = season.questions || [];
+  const final = questions.filter((q) => q.purpose === 'final');
+  return final.length ? final : questions;
+}
 export const subjects: Record<string, [string, string]> = {
   'kz-history': ['История Казахстана', 'Қазақстан тарихы'],
   'world-history': ['Всемирная история', 'Дүниежүзі тарихы'],
@@ -107,6 +135,8 @@ type Context = {
   loading: boolean;
   demo: boolean;
   locale: 'ru' | 'kk';
+  comfort: boolean;
+  setComfort: (enabled: boolean) => void;
   t: (ru: string, kk?: string) => string;
   setLocale: (l: 'ru' | 'kk') => void;
   refresh: () => Promise<void>;
@@ -124,6 +154,9 @@ export function Provider({ children }: { children: ReactNode }) {
     [toast, setToast] = useState('');
   const [locale, setLocaleState] = useState<'ru' | 'kk'>(() =>
     localStorage.getItem('oylatap-locale') === 'kk' ? 'kk' : 'ru',
+  );
+  const [comfort, setComfortState] = useState(
+    () => localStorage.getItem('oylatap-comfort') !== 'off',
   );
   const refresh = useCallback(async () => {
     const d = await api('/me');
@@ -143,6 +176,13 @@ export function Provider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  useEffect(() => {
+    document.documentElement.dataset.comfort = comfort ? 'soft' : 'contrast';
+  }, [comfort]);
+  const setComfort = (enabled: boolean) => {
+    localStorage.setItem('oylatap-comfort', enabled ? 'on' : 'off');
+    setComfortState(enabled);
+  };
   const setLocale = (l: 'ru' | 'kk') => {
     localStorage.setItem('oylatap-locale', l);
     setLocaleState(l);
@@ -155,6 +195,8 @@ export function Provider({ children }: { children: ReactNode }) {
         loading,
         demo,
         locale,
+        comfort,
+        setComfort,
         setLocale,
         t: (ru, kk) => (locale === 'kk' ? kk || ru : ru),
         refresh,
