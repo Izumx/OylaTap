@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   ArrowUpRight,
   Clapperboard,
@@ -17,6 +17,7 @@ import {
   ArrowRight,
   Globe2,
   Sparkles,
+  Moon,
 } from 'lucide-react';
 import { useApp, post, type Season, subjects, minutes } from './lib';
 export function Logo() {
@@ -31,7 +32,10 @@ export function Logo() {
   );
 }
 export function Shell({ children, feed = false }: { children: ReactNode; feed?: boolean }) {
-  const { user, t, locale, setLocale, login, notify, refresh } = useApp();
+  const { user, t, locale, setLocale, login, notify, refresh, comfort, setComfort } = useApp();
+  const location = useLocation();
+  const navClass = (href: string, active: boolean) =>
+    active || (href === '/library' && location.pathname.startsWith('/learn/')) ? 'active' : '';
   const studentLinks = [
     ['/', 'Лента', 'Лента', Play],
     ['/library', 'Сезоны', 'Маусымдар', Library],
@@ -55,8 +59,19 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
             : t('ТВОЁ ПРОСТРАНСТВО', 'СЕНІҢ КЕҢІСТІГІҢ')}
         </div>
         <nav>
+          {user?.role === 'teacher' && (
+            <NavLink to="/" end>
+              <Play size={21} />
+              <span>{t('Лента', 'Лента')}</span>
+            </NavLink>
+          )}
           {links.map(([href, ru, kk, Icon]) => (
-            <NavLink key={href} to={href} end={href === '/'}>
+            <NavLink
+              key={href}
+              to={href}
+              end={href === '/'}
+              className={({ isActive }) => navClass(href, isActive)}
+            >
               <Icon size={21} />
               <span>{t(ru, kk)}</span>
             </NavLink>
@@ -76,6 +91,15 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
           </div>
         )}
         <div className="sidebar-bottom">
+          <button
+            className="comfort-control"
+            aria-pressed={comfort}
+            onClick={() => setComfort(!comfort)}
+          >
+            <Moon size={17} />
+            <span>{t('Спокойный режим', 'Жайлы режим')}</span>
+            <span className={`mini-switch ${comfort ? 'on' : ''}`} aria-hidden="true" />
+          </button>
           <button
             className="language-control"
             onClick={() => setLocale(locale === 'ru' ? 'kk' : 'ru')}
@@ -126,6 +150,14 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
         <Logo />
         <div>
           <button
+            className="comfort-mobile"
+            aria-label={t('Спокойный режим', 'Жайлы режим')}
+            aria-pressed={comfort}
+            onClick={() => setComfort(!comfort)}
+          >
+            <Moon size={18} />
+          </button>
+          <button
             className="language-pill"
             onClick={() => setLocale(locale === 'ru' ? 'kk' : 'ru')}
           >
@@ -139,7 +171,12 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
       <main className="main">{children}</main>
       <nav className="bottom-nav">
         {links.map(([href, ru, kk, Icon]) => (
-          <NavLink key={href} to={href} end={href === '/'}>
+          <NavLink
+            key={href}
+            to={href}
+            end={href === '/'}
+            className={({ isActive }) => navClass(href, isActive)}
+          >
             <Icon size={22} />
             <span>{t(ru, kk)}</span>
           </NavLink>

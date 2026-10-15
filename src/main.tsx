@@ -9,6 +9,7 @@ import { SeasonPage } from './SeasonPage';
 import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from './Student';
 import { StudioPage, EditorPage, ClassesPage, ResultsPage } from './Teacher';
 import './style.css';
+import './comfort.css';
 function App() {
   const loc = useLocation();
   return (

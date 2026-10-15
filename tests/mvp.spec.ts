@@ -178,6 +178,15 @@ test('class code joins student; tests and assignments appear in teacher report',
   expect(
     (await student.post(`/api/seasons/${seed}/attempts`, { data: { answers: [0, 1, 0] } })).ok(),
   ).toBe(true);
+  await page.goto('/classes');
+  const openTopic = page
+    .locator('.teacher-assignments')
+    .getByRole('link', { name: 'Открыть', exact: true });
+  await expect(openTopic).toHaveAttribute('href', `/learn/${seed}`);
+  await openTopic.click();
+  await expect(
+    page.getByRole('heading', { name: 'Как появилось Казахское ханство', exact: true }),
+  ).toBeVisible();
   await page.goto('/results');
   await expect(page.locator('tbody')).toContainText('100%');
   await expect(page.locator('tbody')).toContainText('Тестовый ученик');
@@ -455,4 +464,73 @@ test('guest can explore a topic, and test entry asks for login without recording
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('Войти');
   expect((await page.request.get('/api/progress')).status()).toBe(401);
+});
+
+test('quiet feed keeps focus and appearance preferences, and supports pause and keyboard seeking', async ({
+  page,
+}) => {
+  await page.goto(`/watch/${seed}`);
+  const video = page.locator('.feed-slide video').first();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  await expect(page.locator('html')).toHaveAttribute('data-comfort', 'soft');
+  await expect(page.locator('.season-panel')).toBeHidden();
+  await page.getByRole('button', { name: 'Режим фокуса', exact: true }).click();
+  await expect(page.locator('.season-panel')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.season-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Режим фокуса', exact: true }).click();
+  await page.getByRole('button', { name: 'Спокойный режим', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-comfort', 'contrast');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-comfort', 'contrast');
+  await page.getByRole('button', { name: 'Спокойный режим', exact: true }).click();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  await page.locator('.feed-scroll').focus();
+  await page.keyboard.press('Space');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  const seek = page.locator('.feed-slide').first().getByRole('slider', { name: 'Позиция видео' });
+  await seek.press('Home');
+  await seek.press('ArrowRight');
+  await seek.press('ArrowRight');
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeCloseTo(0.2, 1);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await page.locator('.feed-scroll').focus();
+  await page.keyboard.press('Space');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
+  await mkdir('.local/qa', { recursive: true });
+  await page.screenshot({ path: '.local/qa/feed-comfort-desktop.png' });
+});
+
+test('phone feed fills the screen, keeps controls reachable and does not overflow', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/watch/${seed}`);
+  const video = page.locator('.feed-slide video').first();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  await expect(page.locator('.mobile-header')).toBeHidden();
+  await expect(page.locator('.bottom-nav')).toBeVisible();
+  for (const name of ['Содержание сезона', 'Пройти тест', 'Записать пересказ', 'Включить звук']) {
+    const box = await page.getByRole('button', { name, exact: true }).boundingBox();
+    expect(box).toBeTruthy();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(776);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await mkdir('.local/qa', { recursive: true });
+  await page.screenshot({ path: '.local/qa/feed-comfort-mobile.png' });
+  await page.setViewportSize({ width: 360, height: 740 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(
+    page.getByRole('button', { name: 'Записать пересказ', exact: true }),
+  ).toBeInViewport();
 });

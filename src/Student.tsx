@@ -28,6 +28,9 @@ import {
   LoaderCircle,
   Trash2,
   CalendarDays,
+  PanelRightClose,
+  PanelRightOpen,
+  Moon,
 } from 'lucide-react';
 import {
   api,
@@ -150,6 +153,7 @@ export function Feed() {
   const [searchParams] = useSearchParams();
   const startEpisode = Math.max(0, Number(searchParams.get('episode') || 0));
   const [mode, setMode] = useState<'school' | 'free'>('school'),
+    [focus, setFocus] = useState(() => localStorage.getItem('oylatap-feed-focus') !== 'off'),
     [today, setToday] = useState<any>(null),
     [micro, setMicro] = useState<Episode | null>(null),
     [passed, setPassed] = useState<Set<string>>(new Set());
@@ -237,6 +241,18 @@ export function Feed() {
         e.preventDefault();
         go(active - 1);
       }
+      if (
+        e.code === 'Space' &&
+        !(e.target as HTMLElement)?.closest('button,a,[contenteditable="true"]')
+      ) {
+        const video = scroll.current?.querySelectorAll('video').item(active);
+        if (!video) return;
+        e.preventDefault();
+        if (!e.repeat) {
+          if (video.paused) void video.play().catch(() => {});
+          else video.pause();
+        }
+      }
     };
     window.addEventListener('keydown', fn);
     return () => window.removeEventListener('keydown', fn);
@@ -279,7 +295,7 @@ export function Feed() {
     }
   }
   return (
-    <div className="feed-page">
+    <div className={`feed-page ${focus ? 'feed-focused' : ''}`}>
       <header className="feed-top">
         <div className="feed-tabs">
           <button
@@ -302,9 +318,23 @@ export function Feed() {
           </button>
           {id && <span className="active">{t('Сезон', 'Маусым')}</span>}
         </div>
-        <Link className="feed-search" to="/library" aria-label="Найти сезон">
-          <Search size={20} />
-        </Link>
+        <div className="feed-toolbar">
+          <button
+            className="focus-toggle"
+            aria-label={t('Режим фокуса', 'Назар режимі')}
+            aria-pressed={focus}
+            onClick={() => {
+              setFocus(!focus);
+              localStorage.setItem('oylatap-feed-focus', focus ? 'off' : 'on');
+            }}
+          >
+            {focus ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
+            <span>{focus ? t('О теме', 'Тақырып туралы') : t('Только видео', 'Тек видео')}</span>
+          </button>
+          <Link className="feed-search" to="/library" aria-label="Найти сезон">
+            <Search size={20} />
+          </Link>
+        </div>
       </header>
       <State loading={loading} error={error} retry={reload}>
         {clips.length === 0 ? (
@@ -315,8 +345,17 @@ export function Feed() {
         ) : (
           <div className="feed-body">
             <div className="player-column">
+              <div className="feed-session-label">
+                <span className="live-dot" />
+                {id ? t('Твой сезон', 'Сенің маусымың') : t('Короткая сессия', 'Қысқа сессия')}
+                <span>
+                  {Math.min(active + 1, clips.length)} / {clips.length}
+                </span>
+              </div>
               <div
                 className="feed-scroll"
+                tabIndex={0}
+                role="region"
                 ref={scroll}
                 onScroll={() => {
                   const el = scroll.current;
@@ -405,6 +444,9 @@ export function Feed() {
                   </Link>
                 </div>
               </div>
+              <p className="feed-key-hint">
+                {t('↑ ↓ — листать · пробел — пауза', '↑ ↓ — ауыстыру · бос орын — кідірту')}
+              </p>
               <div className={`feed-actions ${atEnd ? 'hidden-actions' : ''}`}>
                 <button onClick={() => setModal('chapters')} aria-label="Содержание сезона">
                   <span>
@@ -639,8 +681,12 @@ function FeedVideo({
   const { t } = useApp();
   const ref = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false),
-    [pct, setPct] = useState(0),
+    [time, setTime] = useState(0),
+    [duration, setDuration] = useState(0),
     [failed, setFailed] = useState(false);
+  const pct = duration ? (time / duration) * 100 : 0;
+  const stamp = (seconds: number) =>
+    `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
@@ -676,8 +722,11 @@ function FeedVideo({
         onError={() => setFailed(true)}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
-          setPct(v.duration ? (v.currentTime / v.duration) * 100 : 0);
+          setTime(v.currentTime);
         }}
+        onLoadedMetadata={(e) =>
+          setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)
+        }
         onEnded={() => {
           onEnded();
           setPaused(true);
@@ -687,8 +736,8 @@ function FeedVideo({
         aria-label={clip.episode.title}
       />
       <div className="video-top">
-        <Link className="subject-badge" to="/library">
-          {t('УЧИСЬ В СВОЁМ ТЕМПЕ', 'ӨЗ ҚАРҚЫНЫҢМЕН')}
+        <Link className="subject-badge" to={`/learn/${clip.season.id}`}>
+          <BookOpen size={12} /> {t('Открыть тему', 'Тақырыпты ашу')}
         </Link>
         <span className="episode-badge">
           {clip.episode.position + 1}/{clip.season.episodes!.length}
@@ -731,7 +780,7 @@ function FeedVideo({
           </span>
         </div>
         <h2>{clip.episode.title}</h2>
-        <Link to={`/watch/${clip.season.id}`} className="video-season-link">
+        <Link to={`/learn/${clip.season.id}`} className="video-season-link">
           <BookOpen size={14} />
           {clip.season.title}
         </Link>
@@ -742,9 +791,26 @@ function FeedVideo({
           </button>
         )}
       </div>
-      <div className="video-progress">
-        <i style={{ width: `${pct}%` }} />
-      </div>
+      <span className="video-time" aria-hidden="true">
+        {stamp(time)} / {stamp(duration)}
+      </span>
+      <input
+        className="video-seek"
+        type="range"
+        min={0}
+        max={duration || 1}
+        step={0.1}
+        value={Math.min(time, duration || 1)}
+        disabled={!duration}
+        aria-label={t('Позиция видео', 'Видеодағы орын')}
+        aria-valuetext={`${stamp(time)} / ${stamp(duration)}`}
+        style={{ '--played': `${Math.min(100, pct)}%` } as React.CSSProperties}
+        onChange={(e) => {
+          const value = Number(e.target.value);
+          if (ref.current) ref.current.currentTime = value;
+          setTime(value);
+        }}
+      />
     </article>
   );
 }
@@ -1575,7 +1641,7 @@ export function Stat({
   );
 }
 export function ProfilePage() {
-  const { t, user, refresh, notify, demo, setLocale } = useApp();
+  const { t, user, refresh, notify, demo, setLocale, comfort, setComfort } = useApp();
   const [busy, setBusy] = useState(false);
   const catalog = useResource<Season[]>('/catalog');
   const [records, setRecords] = useState<{ season: Season; r: any }[]>([]);
@@ -1594,6 +1660,21 @@ export function ProfilePage() {
         title={t('Как тебе удобно', 'Өзіңе ыңғайлы')}
         description={t('Настрой обучение под себя.', 'Оқуды өзіңе бейімде.')}
       />
+      <section className="panel appearance-panel">
+        <Moon size={23} />
+        <label>
+          <span>
+            <b>{t('Спокойное оформление', 'Жайлы безендіру')}</b>
+            <small>
+              {t(
+                'Приглушённые акценты и меньше анимации. Настройка сохраняется на этом устройстве.',
+                'Жұмсақ түстер және аз анимация. Баптау осы құрылғыда сақталады.',
+              )}
+            </small>
+          </span>
+          <input type="checkbox" checked={comfort} onChange={(e) => setComfort(e.target.checked)} />
+        </label>
+      </section>
       {user?.role === 'student' && <LearningPreferences />}
       <div className="profile-grid">
         <section className="panel">

@@ -1,0 +1,859 @@
+/* Quiet surfaces, a single accent, and a video-first layout. */
+:root {
+  --bg: #16181b;
+  --panel: #202328;
+  --line: #353a40;
+  --muted: #adb4ba;
+  --mint: #a8cfbb;
+  --ink: #182820;
+  color: #e9ebe8;
+  background: var(--bg);
+}
+:root[data-comfort='contrast'] {
+  --bg: #111316;
+  --panel: #1c2024;
+  --mint: #c1f17d;
+}
+body {
+  background: var(--bg);
+}
+.primary:hover:not(:disabled) {
+  background: #bbddcd;
+}
+.sidebar {
+  width: 214px;
+  padding: 28px 18px 20px;
+  background: #191c20;
+  border-color: #30353a;
+}
+.sidebar > .logo {
+  margin: 0 10px 35px;
+}
+.side-label,
+.side-note {
+  display: none;
+}
+.sidebar nav {
+  gap: 8px;
+}
+.sidebar nav a {
+  padding: 16px 13px;
+  font-size: 16px;
+  color: #b7bec3;
+  border-radius: 12px;
+}
+.sidebar nav a svg {
+  width: 24px;
+  height: 24px;
+}
+.sidebar nav a.active {
+  color: #e6f1eb;
+  background: #a8cfbb13;
+}
+.sidebar nav a.active:before {
+  left: -18px;
+  background: var(--mint);
+}
+.sidebar nav a:hover {
+  background: #262c31;
+}
+.main {
+  margin-left: 214px;
+}
+.sidebar-bottom {
+  padding-top: 22px;
+}
+.language-control {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 5px 0 12px;
+}
+.account {
+  padding: 17px 4px 0;
+}
+.account b {
+  font-size: 14px;
+}
+.account small {
+  font-size: 11px;
+}
+.avatar {
+  background: #acc4b9;
+  color: #26382e;
+}
+.logout {
+  color: #afb8bf;
+  font-size: 12px;
+}
+.comfort-control {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  color: #b7c6bd;
+  font-size: 11px;
+}
+.mini-switch {
+  display: block;
+  width: 26px;
+  height: 16px;
+  padding: 3px;
+  background: #464d53;
+  border-radius: 20px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.mini-switch:after {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: #e9ece9;
+  border-radius: 50%;
+}
+.mini-switch.on {
+  background: #658d77;
+}
+.mini-switch.on:after {
+  transform: translateX(10px);
+}
+.comfort-mobile {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.comfort-mobile[aria-pressed='true'] {
+  color: var(--mint);
+  background: #a8cfbb12;
+}
+.page {
+  padding-top: 38px;
+}
+.page-header h1 {
+  font-size: 32px;
+  letter-spacing: -0.9px;
+}
+.page-header p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.panel,
+.season-card,
+.journey-steps > li,
+.topic-episode-list > button {
+  background: var(--panel);
+}
+.topic-hero {
+  background: linear-gradient(125deg, #242e2b, #20252a);
+}
+.journey-steps > li.current {
+  background: #25332d;
+  border-color: #718d7e;
+}
+.topic-intro > p,
+.journey-steps p {
+  color: #c0c8c4;
+}
+.card-body h3 {
+  font-size: 18px;
+}
+.card-body > p {
+  font-size: 13px;
+  color: #aeb8b7;
+}
+.card-subject,
+.card-footer {
+  font-size: 12px;
+}
+.card-language,
+.card-duration {
+  font-size: 10px;
+}
+.card-test-result {
+  color: var(--mint);
+}
+.season-card {
+  border-radius: 18px;
+}
+.season-card:hover {
+  border-color: #6c8a7d;
+}
+.filter-chips button {
+  font-size: 13px;
+  min-height: 42px;
+}
+.topic-save-note,
+.topic-source {
+  color: #adb7b5;
+}
+.appearance-panel {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.appearance-panel > svg {
+  color: var(--mint);
+  flex-shrink: 0;
+}
+.appearance-panel label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 20px;
+  cursor: pointer;
+}
+.appearance-panel b {
+  display: block;
+  margin-bottom: 7px;
+}
+.appearance-panel small {
+  color: var(--muted);
+  line-height: 1.8;
+  display: block;
+}
+.appearance-panel input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--mint);
+  flex-shrink: 0;
+}
+.feed-page {
+  position: relative;
+  background: var(--bg);
+}
+.feed-top {
+  height: 64px;
+  padding: 0 32px;
+  border-color: #30353a;
+  background: #191c20aa;
+}
+.feed-tabs {
+  gap: 30px;
+  font-size: 16px;
+  color: #abb3ba;
+}
+.feed-tabs .active {
+  color: #eef0ed;
+}
+.feed-tabs .active:after {
+  height: 2px;
+  bottom: 10px;
+  left: 26%;
+  right: 26%;
+}
+.feed-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.focus-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #bec7c5;
+  font-size: 12px;
+  padding: 10px 13px;
+  border: 1px solid #3b4247;
+  border-radius: 10px;
+  min-height: 40px;
+}
+.focus-toggle:hover {
+  background: #2b3237;
+}
+.feed-search {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #e2e6e2;
+  background: #2b3035;
+}
+.feed-body {
+  gap: 44px;
+  padding: 41px 32px 25px;
+  align-items: center;
+}
+.player-column {
+  width: min(460px, calc((100dvh - 142px) * 0.5625));
+  height: min(818px, calc(100dvh - 142px));
+  margin-right: 74px;
+}
+.feed-scroll {
+  border-radius: 18px;
+  background: #111518;
+  box-shadow: 0 16px 48px #0003;
+}
+.feed-scroll:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+}
+.feed-focused .season-panel {
+  display: none;
+}
+.feed-session-label {
+  position: absolute;
+  top: -28px;
+  left: 3px;
+  right: 3px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: #b3bcb7;
+}
+.feed-session-label > span:last-child {
+  margin-left: auto;
+  color: #d7e2dc;
+  font-variant-numeric: tabular-nums;
+}
+.live-dot {
+  height: 6px;
+  width: 6px;
+  background: var(--mint);
+  border-radius: 50%;
+}
+.feed-key-hint {
+  position: absolute;
+  bottom: -27px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  margin: 0;
+  font-size: 10px;
+  color: #9ba7aa;
+}
+.video-stage,
+.video-stage > video {
+  background: #111518;
+}
+.video-stage > video {
+  object-fit: contain;
+}
+.video-top {
+  top: 18px;
+  left: 16px;
+  right: 16px;
+}
+.subject-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0;
+  color: #eff1ed;
+  background: #151d20b8;
+  border: 1px solid #ffffff26;
+  padding: 9px 11px;
+}
+.episode-badge {
+  font-size: 11px;
+  background: #151b20b8;
+}
+.video-bottom {
+  padding: 90px 20px 36px;
+  background: linear-gradient(transparent, #101619c4 40%, #101519eb);
+}
+.creator {
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: #e9efea;
+}
+.creator-avatar {
+  background: #d6e7dc;
+  color: #293a2f;
+  width: 28px;
+  height: 28px;
+}
+.video-bottom h2 {
+  font-size: 23px;
+  font-weight: 700;
+  max-width: 100%;
+  margin-bottom: 11px;
+  text-wrap: balance;
+}
+.video-season-link {
+  font-size: 12px;
+  color: #d2ddd6;
+  line-height: 1.6;
+}
+.video-language {
+  font-size: 10px;
+}
+.feed-actions {
+  right: -73px;
+  width: 54px;
+  bottom: 75px;
+  gap: 18px;
+}
+.feed-actions > button {
+  min-width: 48px;
+  min-height: 54px;
+  gap: 7px;
+}
+.feed-actions > button > span {
+  width: 48px;
+  height: 48px;
+  background: #2a3036;
+  color: #e9ece9;
+  border: 1px solid #3c454b;
+}
+.feed-actions > button:hover > span {
+  background: #3a4547;
+}
+.feed-actions > button > .action-mint {
+  color: #d0e6d9;
+  background: #385345;
+  border-color: #6b8c79;
+}
+.feed-actions small {
+  font-size: 11px;
+  color: #bfc8c3;
+}
+.feed-arrows {
+  right: -71px;
+  top: 12px;
+  gap: 10px;
+}
+.feed-arrows button {
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  background: #292f34;
+  color: #dfe5e0;
+  border-color: #3b4449;
+}
+.feed-arrows button:hover:not(:disabled) {
+  background: #3a4547;
+}
+.video-time {
+  position: absolute;
+  bottom: 21px;
+  right: 16px;
+  color: #e3e9e4;
+  font-size: 10px;
+  z-index: 5;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px #000;
+}
+.video-seek {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 20px;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  accent-color: var(--mint);
+}
+.video-seek::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(to right, var(--mint) 0 var(--played), #ffffff40 var(--played) 100%);
+}
+.video-seek::-moz-range-track {
+  height: 3px;
+  background: #ffffff40;
+}
+.video-seek::-moz-range-progress {
+  height: 3px;
+  background: var(--mint);
+}
+.video-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mint);
+}
+.video-seek::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mint);
+}
+.video-seek:focus-visible {
+  outline-offset: -2px;
+}
+.season-panel {
+  width: 278px;
+}
+.season-panel h1 {
+  font-size: 26px;
+}
+.season-panel > p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.chapter-list b {
+  font-size: 13px;
+}
+.chapter-list small {
+  font-size: 11px;
+  color: #a8b6ae;
+}
+.chapter-list > button {
+  background: #21272a;
+  border-color: #38423e;
+}
+.chapter-list > button.active {
+  border-color: #8ba795;
+  background: #a8cfbb10;
+}
+.chapter-number {
+  background: #34423a;
+  color: #d1dfd6;
+}
+.demo-label,
+.feed-tip p {
+  color: #aeb9b0;
+  font-size: 11px;
+}
+.feed-tip {
+  background: #a8cfbb09;
+  border-color: #3d5045;
+}
+.session-end {
+  background: linear-gradient(155deg, #283b32, #1b2523);
+  padding-top: 26px;
+}
+.session-end h2 {
+  font-size: 26px;
+}
+.session-end > p,
+.tomorrow-topic {
+  color: #b8c8be;
+}
+.end-stats > span {
+  color: #bdcbc3;
+}
+.end-orbit {
+  margin-bottom: 17px;
+  width: 62px;
+  height: 62px;
+  border-color: #6c8977;
+}
+.end-orbit svg {
+  width: 32px;
+  height: 32px;
+}
+.session-end .button {
+  white-space: normal;
+  line-height: 1.5;
+}
+.session-next .text-button {
+  font-size: 12px;
+}
+:root[data-comfort='soft'] .equalizer i {
+  animation: none;
+}
+:root[data-comfort='soft'] .equalizer i:nth-child(2) {
+  height: 15px;
+}
+:root[data-comfort='soft'] .button:hover,
+:root[data-comfort='soft'] .season-card:hover {
+  transform: none;
+}
+:root[data-comfort='soft'] .season-card:hover .season-art {
+  transform: none;
+}
+@media (min-width: 721px) and (max-width: 1100px) {
+  .sidebar {
+    width: 80px;
+    padding: 26px 12px 18px;
+  }
+  .sidebar > .logo {
+    margin: 0 auto 30px;
+    font-size: 0;
+  }
+  .sidebar .logo-mark {
+    margin: 0;
+  }
+  .sidebar .logo > span:not(.logo-mark) {
+    display: none;
+  }
+  .sidebar nav a {
+    justify-content: center;
+    padding: 14px 8px;
+  }
+  .sidebar nav a span,
+  .sidebar .language-control span,
+  .sidebar .language-control b,
+  .sidebar .comfort-control span,
+  .sidebar .account > span:nth-child(2),
+  .sidebar .account > svg {
+    display: none;
+  }
+  .sidebar .comfort-control,
+  .sidebar .language-control,
+  .sidebar .account {
+    justify-content: center;
+  }
+  .sidebar .account {
+    padding-top: 16px;
+  }
+  .sidebar .logout {
+    font-size: 0;
+    padding: 16px 0;
+    justify-content: center;
+  }
+  .sidebar .create-link {
+    font-size: 0;
+    padding: 13px;
+  }
+  .main {
+    margin-left: 80px;
+  }
+  .feed-body {
+    gap: 25px;
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .season-panel {
+    width: 250px;
+  }
+}
+@media (max-width: 900px) {
+  .season-panel {
+    display: none;
+  }
+  .focus-toggle {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .main {
+    margin-left: 0;
+    padding-bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+  .sidebar {
+    display: none;
+  }
+  .mobile-header {
+    background: #191d20;
+    border-color: #343b3e;
+  }
+  .feed-layout .mobile-header {
+    display: none;
+  }
+  .feed-layout .main {
+    min-height: 100dvh;
+  }
+  .feed-page {
+    height: calc(100dvh - 68px - env(safe-area-inset-bottom));
+  }
+  .feed-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    padding: 0 16px;
+    z-index: 9;
+    background: linear-gradient(#11181bdf, #11181b80, transparent);
+    border: 0;
+  }
+  .feed-tabs {
+    gap: 22px;
+    font-size: 14px;
+    color: #d2d9d4;
+  }
+  .feed-tabs .active:after {
+    bottom: 8px;
+  }
+  .feed-toolbar {
+    gap: 0;
+  }
+  .feed-search {
+    width: 36px;
+    height: 36px;
+    background: #11191c80;
+  }
+  .feed-body {
+    height: 100%;
+    display: block;
+    padding: 0;
+  }
+  .player-column {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+  .feed-session-label,
+  .feed-key-hint {
+    display: none;
+  }
+  .feed-scroll {
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .video-top {
+    top: 74px;
+    left: 16px;
+    right: 16px;
+  }
+  .subject-badge {
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+  .video-top .subject-badge {
+    opacity: 1;
+  }
+  .video-stage.color-sage > video,
+  .video-stage.color-peach > video,
+  .video-stage.color-lilac > video,
+  .video-stage.color-blue > video {
+    background: #111518;
+  }
+  .video-bottom {
+    padding: 90px 77px 36px 18px;
+  }
+  .video-bottom h2 {
+    font-size: 21px;
+    max-width: 100%;
+    line-height: 1.35;
+  }
+  .creator,
+  .video-season-link {
+    max-width: 100%;
+  }
+  .creator {
+    font-size: 12px;
+  }
+  .video-season-link {
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .video-language {
+    display: none;
+  }
+  .feed-actions {
+    right: 9px;
+    bottom: 150px;
+    width: 48px;
+    gap: 14px;
+  }
+  .feed-actions > button > span {
+    width: 44px;
+    height: 44px;
+    background: #15201dd4;
+    border-color: #ffffff30;
+    backdrop-filter: blur(6px);
+  }
+  .feed-actions > button > .action-mint {
+    background: #385345e8;
+    color: #e3f2e7;
+    border-color: #a8cfbb80;
+  }
+  .feed-actions small {
+    font-size: 10px;
+    color: #e0e7e1;
+  }
+  .feed-arrows {
+    display: none;
+  }
+  .video-play-layer {
+    inset: 112px 62px 180px 0;
+  }
+  .video-quiz {
+    max-width: 100%;
+    font-size: 11px;
+  }
+  .bottom-nav {
+    height: calc(68px + env(safe-area-inset-bottom));
+    background: #171c1df5;
+    border-color: #38403c;
+  }
+  .bottom-nav > a {
+    color: #a2b0a9;
+    gap: 6px;
+  }
+  .bottom-nav > a.active {
+    color: #deeee2;
+  }
+  .bottom-nav > a.active svg {
+    stroke-width: 2.8;
+  }
+  .bottom-nav span {
+    font-size: 10px;
+  }
+  .page {
+    padding: 26px 18px 38px;
+  }
+  .page-header h1 {
+    font-size: 27px;
+  }
+  .page-header p {
+    font-size: 13px;
+  }
+  .card-body h3 {
+    font-size: 15px;
+  }
+  .card-subject,
+  .card-footer {
+    font-size: 10px;
+  }
+  .filter-chips button {
+    min-height: 38px;
+    font-size: 11px;
+  }
+  .card-language,
+  .card-duration {
+    font-size: 9px;
+  }
+  .appearance-panel {
+    padding: 20px 16px;
+    gap: 12px;
+  }
+  .appearance-panel label {
+    gap: 12px;
+  }
+  .appearance-panel b {
+    font-size: 14px;
+  }
+  .appearance-panel small {
+    font-size: 11px;
+  }
+}
+@media (max-width: 380px) {
+  .feed-tabs {
+    gap: 16px;
+    font-size: 13px;
+  }
+  .feed-actions {
+    gap: 10px;
+    bottom: 160px;
+  }
+  .feed-actions > button > span {
+    width: 40px;
+    height: 40px;
+  }
+  .feed-actions small {
+    font-size: 9px;
+  }
+  .video-bottom h2 {
+    font-size: 19px;
+  }
+  .bottom-nav span {
+    font-size: 9px;
+  }
+}

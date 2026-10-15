@@ -107,6 +107,8 @@ type Context = {
   loading: boolean;
   demo: boolean;
   locale: 'ru' | 'kk';
+  comfort: boolean;
+  setComfort: (enabled: boolean) => void;
   t: (ru: string, kk?: string) => string;
   setLocale: (l: 'ru' | 'kk') => void;
   refresh: () => Promise<void>;
@@ -124,6 +126,9 @@ export function Provider({ children }: { children: ReactNode }) {
     [toast, setToast] = useState('');
   const [locale, setLocaleState] = useState<'ru' | 'kk'>(() =>
     localStorage.getItem('oylatap-locale') === 'kk' ? 'kk' : 'ru',
+  );
+  const [comfort, setComfortState] = useState(
+    () => localStorage.getItem('oylatap-comfort') !== 'off',
   );
   const refresh = useCallback(async () => {
     const d = await api('/me');
@@ -143,6 +148,13 @@ export function Provider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  useEffect(() => {
+    document.documentElement.dataset.comfort = comfort ? 'soft' : 'contrast';
+  }, [comfort]);
+  const setComfort = (enabled: boolean) => {
+    localStorage.setItem('oylatap-comfort', enabled ? 'on' : 'off');
+    setComfortState(enabled);
+  };
   const setLocale = (l: 'ru' | 'kk') => {
     localStorage.setItem('oylatap-locale', l);
     setLocaleState(l);
@@ -155,6 +167,8 @@ export function Provider({ children }: { children: ReactNode }) {
         loading,
         demo,
         locale,
+        comfort,
+        setComfort,
         setLocale,
         t: (ru, kk) => (locale === 'kk' ? kk || ru : ru),
         refresh,

@@ -1162,7 +1162,7 @@ export function ClassesPage() {
                   <CalendarDays size={16} />
                   {new Date(v.due_at).toLocaleDateString('ru-RU')}
                 </span>
-                <Link className="button secondary" to={`/studio/${v.season_id}`}>
+                <Link className="button secondary" to={`/learn/${v.season_id}`}>
                   {t('Открыть', 'Ашу')}
                   <ArrowRight size={16} />
                 </Link>
