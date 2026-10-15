@@ -41,6 +41,7 @@ import {
   minutes,
   type Season,
   type Episode,
+  type DailySession,
 } from './lib';
 import { Modal, State, PageHeader, SeasonArt, SeasonCard } from './components';
 import { LearningPreferences } from './Learning';
@@ -154,7 +155,8 @@ export function Feed() {
   const startEpisode = Math.max(0, Number(searchParams.get('episode') || 0));
   const [mode, setMode] = useState<'school' | 'free'>('school'),
     [focus, setFocus] = useState(() => localStorage.getItem('oylatap-feed-focus') !== 'off'),
-    [today, setToday] = useState<any>(null),
+    [today, setToday] = useState<DailySession | null>(null),
+    [dailyStart, setDailyStart] = useState(0),
     [micro, setMicro] = useState<Episode | null>(null),
     [passed, setPassed] = useState<Set<string>>(new Set());
   const { user, t, locale, notify, login, authOpen } = useApp();
@@ -166,31 +168,43 @@ export function Feed() {
     [modal, setModal] = useState<'quiz' | 'record' | 'chapters' | 'notes' | null>(null),
     [version, setVersion] = useState(0);
   const scroll = useRef<HTMLDivElement>(null);
-  const reload = () => setVersion((v) => v + 1);
+  const slideHeight = useRef(0);
+  const activeSlide = useRef(0);
+  const dailyRef = useRef<DailySession | null>(null);
+  const feedGeneration = useRef(0);
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     let alive = true;
+    feedGeneration.current += 1;
     setLoading(true);
     setError('');
     (async () => {
-      const daily = id ? null : await api(`/today?mode=${mode}`);
+      const daily = id ? null : await api<DailySession>(`/today?mode=${mode}`);
       const all: Season[] = id
         ? [await api(`/seasons/${id}`)]
-        : daily.season_id
+        : daily?.season_id
           ? [await api(`/seasons/${daily.season_id}`)]
           : [];
       if (alive) {
         setToday(daily);
+        dailyRef.current = daily;
         setPassed(new Set(daily?.correct_ids || []));
+        const firstPending =
+          daily?.episode_ids.findIndex((episodeId) => !daily.completed_ids?.includes(episodeId)) ??
+          0;
+        setDailyStart(firstPending < 0 ? daily?.episode_ids.length || 0 : firstPending);
+        setMicro(null);
       }
       if (alive) {
         setClips(
           all.flatMap((season) =>
             (season.episodes || [])
-              .filter((e) => id || daily.episode_ids.includes(e.id))
+              .filter((e) => id || daily?.episode_ids.includes(e.id))
               .map((episode) => ({ season, episode })),
           ),
         );
         setActive(0);
+        activeSlide.current = 0;
         scroll.current?.scrollTo(0, 0);
       }
     })()
@@ -202,30 +216,51 @@ export function Feed() {
       });
     return () => {
       alive = false;
+      feedGeneration.current += 1;
     };
   }, [id, user?.id, version, mode]);
   const current = clips[Math.min(active, clips.length - 1)];
   const atEnd = active === clips.length;
+  const sessionDone =
+    clips.length > 0 && clips.every((c) => c.episode.completed && passed.has(c.episode.id));
+  const sourceLabel =
+    today?.topic_source === 'class'
+      ? t('Тема класса', 'Сынып тақырыбы')
+      : today?.topic_source === 'assignment'
+        ? t('Задание учителя', 'Мұғалім тапсырмасы')
+        : today?.topic_source === 'personal'
+          ? t('Твоя выбранная тема', 'Таңдаған тақырыбың')
+          : today?.topic_source === 'review'
+            ? t('Повторение сложного', 'Қиын тақырыпты қайталау')
+            : t('Тема из библиотеки', 'Кітапхана тақырыбы');
   const go = useCallback(
-    (n: number) => {
+    (n: number, behavior: ScrollBehavior = 'smooth') => {
       const el = scroll.current;
       if (!el) return;
       el.scrollTo({
         top: Math.max(0, Math.min(n, clips.length)) * el.clientHeight,
-        behavior: 'smooth',
+        behavior,
       });
     },
     [clips.length],
   );
   useEffect(() => {
     if (loading || !clips.length) return;
-    const target = id
-      ? Math.min(startEpisode, clips.length - 1)
-      : today?.correct >= today?.goal
-        ? clips.length
-        : 0;
-    requestAnimationFrame(() => go(Number.isFinite(target) ? target : 0));
-  }, [loading, id, startEpisode, today?.correct, today?.goal, clips.length, go]);
+    const target = id ? Math.min(startEpisode, clips.length - 1) : dailyStart;
+    requestAnimationFrame(() => go(Number.isFinite(target) ? target : 0, 'instant'));
+  }, [loading, id, startEpisode, dailyStart, clips.length, go]);
+  useEffect(() => {
+    const el = scroll.current;
+    if (!el || loading) return;
+    slideHeight.current = el.clientHeight;
+    const observer = new ResizeObserver(() => {
+      if (el.clientHeight === slideHeight.current) return;
+      slideHeight.current = el.clientHeight;
+      el.scrollTo({ top: activeSlide.current * el.clientHeight, behavior: 'instant' });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loading, clips.length]);
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
       if (
@@ -265,21 +300,77 @@ export function Feed() {
     setModal(kind);
   };
   async function complete(episode: Episode) {
-    if (!user || episode.completed) return;
+    if (episode.completed) return;
     try {
-      await post(`/episodes/${episode.id}/complete`);
+      if (user) await post(`/episodes/${episode.id}/complete`);
       setClips((old) =>
         old.map((c) =>
           c.episode.id === episode.id ? { ...c, episode: { ...c.episode, completed: true } } : c,
         ),
       );
-      notify(
-        t('Серия просмотрена. Теперь проверь понимание!', 'Серия аяқталды. Түсінгеніңді тексер!'),
-      );
+      if (user)
+        notify(
+          t('Серия просмотрена. Теперь проверь понимание!', 'Серия аяқталды. Түсінгеніңді тексер!'),
+        );
     } catch (e) {
       notify((e as Error).message);
     }
   }
+  const refreshDaily = useCallback(async () => {
+    if (!id && user?.id) {
+      const generation = feedGeneration.current;
+      try {
+        const plan = await api<DailySession>(`/today?mode=${mode}`);
+        if (generation !== feedGeneration.current) return;
+        const old = dailyRef.current;
+        if (
+          old &&
+          (old.session_date !== plan.session_date ||
+            old.season_id !== plan.season_id ||
+            old.episode_ids.join() !== plan.episode_ids.join())
+        ) {
+          reload();
+          return;
+        }
+        dailyRef.current = plan;
+        setToday(plan);
+        setPassed(new Set(plan.correct_ids || []));
+        setClips((oldClips) =>
+          oldClips.map((clip) => ({
+            ...clip,
+            episode: {
+              ...clip.episode,
+              completed:
+                clip.episode.completed || Boolean(plan.completed_ids?.includes(clip.episode.id)),
+            },
+          })),
+        );
+      } catch (error) {
+        if (generation === feedGeneration.current) notify((error as Error).message);
+      }
+    }
+  }, [id, user?.id, mode, notify, reload]);
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') void refreshDaily();
+    };
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onReturn);
+    const timer = setInterval(() => {
+      const date = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Qyzylorda',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+      if (dailyRef.current && date !== dailyRef.current.session_date) onReturn();
+    }, 60000);
+    return () => {
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onReturn);
+      clearInterval(timer);
+    };
+  }, [refreshDaily]);
   async function share() {
     if (!current) return;
     const url = new URL(`/watch/${current.season.id}`, window.location.origin).href;
@@ -347,7 +438,7 @@ export function Feed() {
             <div className="player-column">
               <div className="feed-session-label">
                 <span className="live-dot" />
-                {id ? t('Твой сезон', 'Сенің маусымың') : t('Короткая сессия', 'Қысқа сессия')}
+                {id ? t('Твой сезон', 'Сенің маусымың') : sourceLabel}
                 <span>
                   {Math.min(active + 1, clips.length)} / {clips.length}
                 </span>
@@ -359,8 +450,14 @@ export function Feed() {
                 ref={scroll}
                 onScroll={() => {
                   const el = scroll.current;
-                  if (el)
-                    setActive(Math.min(clips.length, Math.round(el.scrollTop / el.clientHeight)));
+                  if (el && el.clientHeight === slideHeight.current) {
+                    const index = Math.min(
+                      clips.length,
+                      Math.round(el.scrollTop / el.clientHeight),
+                    );
+                    activeSlide.current = index;
+                    setActive(index);
+                  }
                 }}
                 aria-label="Вертикальная лента. Листайте вверх или вниз."
               >
@@ -368,11 +465,14 @@ export function Feed() {
                   <div className="feed-slide" key={c.episode.id}>
                     <FeedVideo
                       clip={c}
+                      context={today ? sourceLabel : undefined}
                       active={i === active && !modal && !micro && !authOpen}
                       muted={muted}
                       onEnded={() => {
-                        void complete(c.episode);
-                        setMicro(c.episode);
+                        const generation = feedGeneration.current;
+                        void complete(c.episode).then(() => {
+                          if (generation === feedGeneration.current) setMicro(c.episode);
+                        });
                       }}
                       onQuiz={() => open('quiz')}
                     />
@@ -385,8 +485,16 @@ export function Feed() {
                   <span className="eyebrow">{t('В СВОЁМ ТЕМПЕ', 'ӨЗ ҚАРҚЫНЫҢМЕН')}</span>
                   <h2>
                     {t(
-                      passed.size >= clips.length ? 'Цель дня выполнена' : 'Сессия закончилась',
-                      passed.size >= clips.length ? 'Күндік мақсат орындалды' : 'Сессия аяқталды',
+                      sessionDone
+                        ? today?.is_review
+                          ? 'Тема уже пройдена'
+                          : 'Цель дня выполнена'
+                        : 'Сессия закончилась',
+                      sessionDone
+                        ? today?.is_review
+                          ? 'Тақырып аяқталған'
+                          : 'Күндік мақсат орындалды'
+                        : 'Сессия аяқталды',
                     )}
                   </h2>
                   <p>
@@ -409,24 +517,80 @@ export function Feed() {
                   </div>
                   {current && (
                     <div className="session-next">
-                      <button className="button primary full" onClick={() => open('quiz')}>
-                        <ListChecks size={18} />
-                        {t('Закрепить тему: пройти тест', 'Тақырыпты бекіту: тест тапсыру')}
-                      </button>
+                      {today && !sessionDone ? (
+                        <button
+                          className="button primary full"
+                          onClick={() =>
+                            go(
+                              clips.findIndex(
+                                (clip) => !clip.episode.completed || !passed.has(clip.episode.id),
+                              ),
+                            )
+                          }
+                        >
+                          <RotateCcw size={18} />{' '}
+                          {t('Вернуться к сериям сессии', 'Сессия серияларына оралу')}
+                        </button>
+                      ) : today?.next_step === 'continue' && today.next_episode ? (
+                        <Link
+                          className="button primary full"
+                          to={`/watch/${current.season.id}?episode=${today.next_episode.position}`}
+                        >
+                          <Play size={18} />{' '}
+                          {t('Продолжить тему сейчас', 'Тақырыпты қазір жалғастыру')}
+                        </Link>
+                      ) : today?.next_step === 'retelling' ? (
+                        <button className="button primary full" onClick={() => open('record')}>
+                          <Mic size={18} /> {t('Рассказать своими словами', 'Өз сөзіңмен айту')}
+                        </button>
+                      ) : today?.next_step === 'complete' ? (
+                        <Link className="button primary full" to="/progress">
+                          {t('Посмотреть прогресс', 'Прогресті көру')} <ArrowRight size={18} />
+                        </Link>
+                      ) : (
+                        <button className="button primary full" onClick={() => open('quiz')}>
+                          <ListChecks size={18} />
+                          {t('Закрепить тему: пройти тест', 'Тақырыпты бекіту: тест тапсыру')}
+                        </button>
+                      )}
                       <Link className="text-button" to={`/learn/${current.season.id}`}>
                         {t('Мой маршрут по теме', 'Тақырып бойынша жолым')}
                         <ArrowRight size={16} />
                       </Link>
                     </div>
                   )}
-                  {today?.tomorrow && (
+                  {today && (
                     <div className="tomorrow-topic">
-                      {t('Следующая встреча с темой', 'Тақырыппен келесі кездесу')}
-                      <strong>{today.tomorrow}</strong>
+                      {t('Дальше по теме', 'Тақырып бойынша келесі қадам')}
+                      <strong>
+                        {today.next_episode
+                          ? t(
+                              `Серия ${today.next_episode.position + 1}: ${today.next_episode.title}`,
+                              `${today.next_episode.position + 1}-серия: ${today.next_episode.title}`,
+                            )
+                          : today.next_step === 'quiz'
+                            ? t('Итоговый тест', 'Қорытынды тест')
+                            : today.next_step === 'retelling'
+                              ? t('Объясни своими словами', 'Өз сөзіңмен түсіндір')
+                              : t('Тест и пересказ сохранены', 'Тест пен мазмұндау сақталды')}
+                      </strong>
                       <small>
-                        {t(
-                          'Продолжим разбирать и повторим сложное. Тему может изменить учитель.',
-                          'Жалғастырып, күрделі тұстарын қайталаймыз. Мұғалім тақырыпты өзгерте алады.',
+                        {today.next_episode
+                          ? t(
+                              'Сегодняшний набор сохранён. Следующая короткая сессия — завтра. Продолжить тему сейчас можно по желанию.',
+                              'Бүгінгі сериялар сақталды. Келесі қысқа сессия — ертең. Қаласаң, тақырыпты қазір жалғастыр.',
+                            )
+                          : t(
+                              'Конец короткой сессии и результат теста — разные шаги. Результат пересказа оценивает учитель.',
+                              'Қысқа сессияның соңы мен тест нәтижесі — бөлек қадамдар. Мазмұндауды мұғалім бағалайды.',
+                            )}
+                        {!sessionDone && (
+                          <span>
+                            {t(
+                              ' Чтобы завершить маршрут серий, посмотри их и ответь верно на микровопросы.',
+                              ' Сериялар жолын аяқтау үшін оларды көріп, микросұрақтарға дұрыс жауап бер.',
+                            )}
+                          </span>
                         )}
                       </small>
                     </div>
@@ -505,6 +669,16 @@ export function Feed() {
                     today?.topic_source === 'class' ? 'БҮГІН СЫНЫПТА' : 'БҮГІНГІ ТАҚЫРЫБЫҢ',
                   )}
                 </div>
+                {today && (
+                  <p className="daily-reason">
+                    {sourceLabel}
+                    {today.class_name ? ` · ${today.class_name}` : ''}.{' '}
+                    {t(
+                      `Сессия: ${clips.length} из ${today.route_total} серий темы.`,
+                      `Сессия: тақырыптың ${today.route_total} сериясынан ${clips.length} серия.`,
+                    )}
+                  </p>
+                )}
                 <h1>{current.season.title}</h1>
                 <p>{current.season.description}</p>
                 <div className="season-meta">
@@ -522,7 +696,7 @@ export function Feed() {
                 <div className="chapter-list">
                   {current.season
                     .episodes!.filter((ep) => id || clips.some((c) => c.episode.id === ep.id))
-                    .map((ep, i) => (
+                    .map((ep) => (
                       <button
                         key={ep.id}
                         className={ep.id === current.episode.id ? 'active' : ''}
@@ -532,7 +706,7 @@ export function Feed() {
                           {clips.find((c) => c.episode.id === ep.id)?.episode.completed ? (
                             <Check size={16} />
                           ) : (
-                            String(i + 1).padStart(2, '0')
+                            String(ep.position + 1).padStart(2, '0')
                           )}
                         </span>
                         <span>
@@ -595,7 +769,10 @@ export function Feed() {
         <MicroQuestion
           episode={micro}
           onClose={() => setMicro(null)}
-          onPassed={() => setPassed((old) => new Set([...old, micro.id]))}
+          onPassed={() => {
+            setPassed((old) => new Set([...old, micro.id]));
+            void refreshDaily();
+          }}
           onNext={() => {
             setMicro(null);
             go(active + 1);
@@ -640,7 +817,10 @@ export function Feed() {
       {current && modal === 'quiz' && (
         <Quiz
           season={current.season}
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null);
+            void refreshDaily();
+          }}
           onRecord={() => setModal('record')}
           onReview={(position) => {
             setModal(null);
@@ -657,7 +837,13 @@ export function Feed() {
         />
       )}
       {current && modal === 'record' && (
-        <Recorder season={current.season} onClose={() => setModal(null)} />
+        <Recorder
+          season={current.season}
+          onClose={() => {
+            setModal(null);
+            void refreshDaily();
+          }}
+        />
       )}
     </div>
   );
@@ -667,12 +853,14 @@ function ArrowUpRightIcon() {
 }
 function FeedVideo({
   clip,
+  context,
   active,
   muted,
   onEnded,
   onQuiz,
 }: {
   clip: Clip;
+  context?: string;
   active: boolean;
   muted: boolean;
   onEnded: () => void;
@@ -770,6 +958,7 @@ function FeedVideo({
         </div>
       )}
       <div className="video-bottom">
+        {context && <p className="video-context">{context}</p>}
         <div className="creator">
           <span className="creator-avatar">O</span>
           <span>

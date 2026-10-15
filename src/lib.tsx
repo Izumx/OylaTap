@@ -31,6 +31,25 @@ export type Question = {
   correct?: number;
   explanation?: string;
 };
+export type DailySession = {
+  season_id: string | null;
+  episode_ids: string[];
+  goal: number;
+  correct: number;
+  correct_ids?: string[];
+  completed_ids?: string[];
+  session_complete?: boolean;
+  session_date: string;
+  mode: 'school' | 'free';
+  topic_source?: 'class' | 'assignment' | 'personal' | 'review' | 'library';
+  class_name?: string | null;
+  topic?: string;
+  is_review?: boolean;
+  route_done?: number;
+  route_total?: number;
+  next_episode?: { id: string; title: string; position: number } | null;
+  next_step?: 'continue' | 'quiz' | 'retelling' | 'complete';
+};
 export type Season = {
   id: string;
   title: string;

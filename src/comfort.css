@@ -563,6 +563,16 @@ body {
 .session-next .text-button {
   font-size: 12px;
 }
+.video-context {
+  color: #d1e3d8;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.daily-reason {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 :root[data-comfort='soft'] .equalizer i {
   animation: none;
 }
