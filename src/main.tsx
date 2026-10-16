@@ -15,6 +15,7 @@ import './style.css';
 import './comfort.css';
 import './reports.css';
 import './polish.css';
+import './mobile.css';
 function App() {
   const loc = useLocation();
   return (

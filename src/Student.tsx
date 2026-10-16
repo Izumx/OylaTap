@@ -698,6 +698,7 @@ export function Feed() {
                   <small>{t('Пересказ', 'Мазмұндау')}</small>
                 </button>
                 <button
+                  className="like-action"
                   onClick={() => current && void like(current)}
                   aria-label={current?.episode.liked ? 'Убрать лайк' : 'Нравится объяснение'}
                   aria-pressed={Boolean(current?.episode.liked)}
@@ -714,7 +715,9 @@ export function Feed() {
                   <small>{t('Поделиться', 'Бөлісу')}</small>
                 </button>
                 <button
+                  className="sound-action"
                   onClick={() => setMuted(!muted)}
+                  aria-pressed={!muted}
                   aria-label={muted ? 'Включить звук' : 'Выключить звук'}
                 >
                   <span>{muted ? <VolumeX size={22} /> : <Volume2 size={22} />}</span>

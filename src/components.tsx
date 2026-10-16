@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Clapperboard,
   Play,
+  House,
   Library,
   ClipboardList,
   ListChecks,
@@ -38,7 +39,7 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
   const navClass = (href: string, active: boolean) =>
     active || (href === '/library' && location.pathname.startsWith('/learn/')) ? 'active' : '';
   const studentLinks = [
-    ['/', 'Лента', 'Лента', Play],
+    ['/', 'Лента', 'Лента', House],
     ['/library', 'Сезоны', 'Маусымдар', Library],
     ['/assignments', 'Задания', 'Тапсырмалар', ClipboardList],
     ['/progress', 'Мой прогресс', 'Менің прогресім', ChartNoAxesCombined],
@@ -190,7 +191,7 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
         </div>
       </header>
       <main className="main">{children}</main>
-      <nav className="bottom-nav">
+      <nav className="bottom-nav" aria-label={t('Основная навигация', 'Негізгі навигация')}>
         {links.map(([href, ru, kk, Icon]) => (
           <NavLink
             key={href}
