@@ -249,6 +249,39 @@ test('watching, likes and first answers feed author statistics', async ({ browse
   expect((await student.context.request.get('/api/studio/stats')).status()).toBe(403);
 });
 
+test('double tap likes once, preserves playback and persists after reload on mobile', async ({
+  browser,
+}) => {
+  const author = await actor(browser, 'creator'),
+    student = await actor(browser, 'student');
+  await db.query("UPDATE users SET trust_level='trusted' WHERE id=$1", [author.id]);
+  const id = await rendered(author, 'Двойной тап по учебному ролику');
+  await publish(author, id);
+  const page = await student.context.newPage();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/watch/${id}`);
+  const video = page.locator('video').first();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(0);
+  const tap = page.locator('.video-play-layer').first();
+  await tap.dblclick();
+  await expect(page.locator('.like-action')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
+  await tap.dblclick();
+  await expect(page.locator('.like-action small')).toHaveText('1');
+  await tap.click();
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  const episode = (await get(student, `/seasons/${id}`)).episodes[0];
+  expect(episode).toMatchObject({ liked: true, likes: 1 });
+  await page.reload();
+  await expect(page.locator('.like-action')).toHaveAttribute('aria-pressed', 'true');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await tap.dblclick();
+  await expect(page.locator('.video-heart-burst')).toHaveCSS('animation-name', 'none');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("the author's own narration sets the timing and is muxed into the video", async ({
   browser,
 }) => {

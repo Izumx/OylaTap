@@ -14,7 +14,7 @@ import {
   BookOpen,
   Mic,
   ListChecks,
-  Share2,
+  Forward,
   X,
   Search,
   SlidersHorizontal,
@@ -324,12 +324,12 @@ export function Feed() {
     window.addEventListener('keydown', fn);
     return () => window.removeEventListener('keydown', fn);
   }, [active, go]);
-  async function like(clip: Clip) {
+  async function like(clip: Clip, liked = !clip.episode.liked): Promise<boolean> {
     if (!user) {
       login();
-      return;
+      return false;
     }
-    const liked = !clip.episode.liked;
+    if (liked && clip.episode.liked) return true;
     try {
       const v = await post(`/episodes/${clip.episode.id}/like`, { liked });
       setClips((old) =>
@@ -339,8 +339,10 @@ export function Feed() {
             : c,
         ),
       );
+      return true;
     } catch (e) {
       notify((e as Error).message);
+      return false;
     }
   }
   const open = (kind: 'quiz' | 'record') => {
@@ -541,6 +543,7 @@ export function Feed() {
                         });
                       }}
                       onQuiz={() => open('quiz')}
+                      onLike={() => like(c, true)}
                       onReport={() => (user ? setModal('report') : login())}
                     />
                   </div>
@@ -704,13 +707,13 @@ export function Feed() {
                   aria-pressed={Boolean(current?.episode.liked)}
                 >
                   <span className={current?.episode.liked ? 'action-liked' : ''}>
-                    <Heart size={23} fill={current?.episode.liked ? 'currentColor' : 'none'} />
+                    <Heart size={23} fill="currentColor" />
                   </span>
                   <small>{current?.episode.likes || t('Нравится', 'Ұнайды')}</small>
                 </button>
                 <button onClick={() => void share()} aria-label="Поделиться сезоном">
                   <span>
-                    <Share2 size={23} />
+                    <Forward size={25} />
                   </span>
                   <small>{t('Поделиться', 'Бөлісу')}</small>
                 </button>
@@ -949,6 +952,7 @@ function FeedVideo({
   onEnded,
   onQuiz,
   onReport,
+  onLike,
 }: {
   clip: Clip;
   context?: string;
@@ -958,14 +962,25 @@ function FeedVideo({
   onEnded: () => void;
   onQuiz: () => void;
   onReport: () => void;
+  onLike: () => Promise<boolean>;
 }) {
-  const { t, user } = useApp();
+  const { t, user, locale } = useApp();
   // Demo topics belong to the platform; an author's lesson always carries the author's name.
   const authorName =
     clip.season.owner_role !== 'creator' && clip.season.source_name?.startsWith('Демонстрационные')
       ? 'OylaTap'
       : clip.season.owner_name || 'OylaTap';
   const ref = useRef<HTMLVideoElement>(null);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [burst, setBurst] = useState(0);
+  const genericTitle = /^Серия\s*\d+$/i.test(clip.episode.title);
+  useEffect(() => {
+    if (!active) setBurst(0);
+    return () => {
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+    };
+  }, [active]);
   const [paused, setPaused] = useState(false),
     [time, setTime] = useState(0),
     [duration, setDuration] = useState(0),
@@ -1047,7 +1062,25 @@ function FeedVideo({
       </div>
       <button
         className="video-play-layer"
-        onClick={toggle}
+        onClick={(event) => {
+          // Keyboard activation stays immediate; two touch/click taps only like.
+          if (event.detail === 0) {
+            if (tapTimer.current) clearTimeout(tapTimer.current);
+            tapTimer.current = null;
+            toggle();
+          } else if (tapTimer.current) {
+            clearTimeout(tapTimer.current);
+            tapTimer.current = null;
+            void onLike().then((ok) => {
+              if (ok) setBurst((n) => n + 1);
+            });
+          } else {
+            tapTimer.current = setTimeout(() => {
+              tapTimer.current = null;
+              toggle();
+            }, 260);
+          }
+        }}
         aria-label={paused ? 'Воспроизвести' : 'Пауза'}
       >
         {paused && (
@@ -1055,7 +1088,23 @@ function FeedVideo({
             <Play size={36} fill="currentColor" />
           </span>
         )}
+        {paused && (
+          <small className="video-gesture-hint">
+            {t('Двойной тап — лайк', 'Екі рет түрту — лайк')}
+          </small>
+        )}
       </button>
+      {burst > 0 && active && (
+        <div
+          key={burst}
+          className="video-heart-burst"
+          aria-hidden="true"
+          onAnimationEnd={() => setBurst(0)}
+        >
+          <Heart fill="currentColor" />
+          <Sparkles />
+        </div>
+      )}
       {failed && (
         <div className="video-failure">
           <p>{t('Видео не загрузилось', 'Видео жүктелмеді')}</p>
@@ -1089,11 +1138,13 @@ function FeedVideo({
             {clip.season.language === 'kk' ? 'Қазақша' : 'Русский'}
           </span>
         </div>
-        <h2>{clip.episode.title}</h2>
+        <h2>{genericTitle ? clip.season.title : clip.episode.title}</h2>
         <div className="video-meta-row">
           <Link to={`/learn/${clip.season.id}`} className="video-season-link">
             <BookOpen size={14} />
-            {clip.season.title}
+            {genericTitle
+              ? `${subjects[clip.season.subject]?.[locale === 'kk' ? 1 : 0]} · ${clip.season.grade} ${t('класс', 'сынып')}`
+              : clip.season.title}
           </Link>
           <button className="video-report" onClick={onReport} aria-label="Сообщить об ошибке">
             <Flag size={13} />
