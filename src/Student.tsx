@@ -1638,6 +1638,7 @@ export function LibraryPage() {
   const r = useResource<Season[]>('/catalog');
   const { t, locale } = useApp();
   const [search, setSearch] = useState(''),
+    [showFilters, setShowFilters] = useState(false),
     [subject, setSubject] = useState('all'),
     [lang, setLang] = useState('all'),
     [grade, setGrade] = useState('all');
@@ -1646,46 +1647,64 @@ export function LibraryPage() {
       (subject === 'all' || s.subject === subject) &&
       (lang === 'all' || s.language === lang) &&
       (grade === 'all' || s.grade === Number(grade)) &&
-      `${s.title} ${s.description}`.toLowerCase().includes(search.toLowerCase()),
+      `${s.title} ${s.description}`.toLowerCase().includes(search.trim().toLowerCase()),
   );
+  const filterCount = Number(lang !== 'all') + Number(grade !== 'all');
   return (
-    <div className="page">
+    <div className="page library-page">
       <PageHeader
-        eyebrow={t('ТВОЯ СЛЕДУЮЩАЯ ИСТОРИЯ', 'КЕЛЕСІ ОҚИҒАҢ')}
-        title={t('Любопытство — хороший план', 'Қызығушылық — жақсы жоспар')}
-        description={t(
-          'Выбери тему. Несколько коротких серий — и всё встаёт на свои места.',
-          'Тақырып таңда. Қысқа сериялар арқылы түсін.',
-        )}
+        eyebrow=""
+        title={t('Библиотека', 'Кітапхана')}
+        description={t('Выбери, в чём хочешь разобраться.', 'Қай тақырыпты түсінгің келеді?')}
       />
       <div className="library-toolbar">
-        <label className="search-field">
-          <Search size={19} />
+        <div className="search-field" role="search">
+          <Search size={20} aria-hidden="true" />
           <input
+            type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('Название или тема', 'Атауы немесе тақырып')}
-            aria-label="Поиск сезонов"
+            placeholder={t('Найти тему', 'Тақырыпты табу')}
+            aria-label={t('Поиск сезонов', 'Маусымдарды іздеу')}
           />
           {search && (
             <button aria-label="Очистить поиск" onClick={() => setSearch('')}>
               <X size={16} />
             </button>
           )}
+        </div>
+        <button
+          className="library-filter-toggle"
+          aria-label={t('Фильтры', 'Сүзгілер')}
+          aria-expanded={showFilters}
+          aria-controls="library-filters"
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          <SlidersHorizontal size={19} />
+          <span>{t('Фильтры', 'Сүзгілер')}</span>
+          {filterCount > 0 && <b>{filterCount}</b>}
+        </button>
+      </div>
+      <div id="library-filters" className="library-filter-fields" hidden={!showFilters}>
+        <label>
+          {t('Язык', 'Тіл')}
+          <select aria-label="Язык контента" value={lang} onChange={(e) => setLang(e.target.value)}>
+            <option value="all">{t('Все языки', 'Барлық тілдер')}</option>
+            <option value="ru">Русский</option>
+            <option value="kk">Қазақша</option>
+          </select>
         </label>
-        <select aria-label="Язык контента" value={lang} onChange={(e) => setLang(e.target.value)}>
-          <option value="all">{t('Все языки', 'Барлық тілдер')}</option>
-          <option value="ru">Русский</option>
-          <option value="kk">Қазақша</option>
-        </select>
-        <select aria-label="Класс" value={grade} onChange={(e) => setGrade(e.target.value)}>
-          <option value="all">{t('Все классы', 'Барлық сыныптар')}</option>
-          {[5, 6, 7, 8, 9, 10, 11].map((g) => (
-            <option key={g} value={g}>
-              {g} {t('класс', 'сынып')}
-            </option>
-          ))}
-        </select>
+        <label>
+          {t('Класс', 'Сынып')}
+          <select aria-label="Класс" value={grade} onChange={(e) => setGrade(e.target.value)}>
+            <option value="all">{t('Все классы', 'Барлық сыныптар')}</option>
+            {[5, 6, 7, 8, 9, 10, 11].map((g) => (
+              <option key={g} value={g}>
+                {g} {t('класс', 'сынып')}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="filter-chips">
         <button className={subject === 'all' ? 'active' : ''} onClick={() => setSubject('all')}>
@@ -1704,8 +1723,8 @@ export function LibraryPage() {
       <State {...r} retry={r.reload}>
         {filtered.length ? (
           <>
-            <div className="section-label">
-              {filtered.length} {t('сезона для новых открытий', 'маусым')}
+            <div className="section-label" aria-live="polite">
+              {t('Темы', 'Тақырыптар')} · {filtered.length}
             </div>
             <div className="season-grid">
               {filtered.map((s) => (

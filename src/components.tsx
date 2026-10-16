@@ -374,7 +374,13 @@ export function SeasonArt({
   };
   const [bg, ink, light] = palettes[color] || palettes.sage;
   return (
-    <svg className={`season-art ${className}`} viewBox="0 0 400 300" fill="none" aria-hidden="true">
+    <svg
+      className={`season-art ${className}`}
+      viewBox="0 0 400 300"
+      preserveAspectRatio="xMidYMid slice"
+      fill="none"
+      aria-hidden="true"
+    >
       <rect width="400" height="300" fill={bg} />
       <circle cx="335" cy="65" r="95" fill={light} opacity=".45" />
       <path d="M-30 266Q90 160 216 245T460 210V340H-30Z" fill={ink} opacity=".1" />
