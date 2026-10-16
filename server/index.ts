@@ -309,7 +309,7 @@ app.get('/api/episodes/:id/video', async (req, res) => {
   // Authors download their own cut to post on TikTok or Reels with the OylaTap signature.
   if (req.query.download === '1' && ep.owner_id === req.user?.id)
     res.attachment(`${ep.title.replace(/[^\p{L}\d]+/gu, '-').slice(0, 60) || 'oylatap'}.mp4`);
-  res.type('video/mp4').sendFile(ep.media_path, { dotfiles: 'allow' });
+  res.type('video/mp4').sendFile(resolve(ep.media_path), { dotfiles: 'allow' });
 });
 app.post('/api/episodes/:id/complete', required, async (req, res) => {
   const id = uid.parse(req.params.id);
