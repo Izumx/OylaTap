@@ -14,6 +14,7 @@ import {
   BookOpen,
   Mic,
   ListChecks,
+  CircleHelp,
   Forward,
   X,
   Search,
@@ -442,36 +443,45 @@ export function Feed() {
   return (
     <div className={`feed-page ${focus ? 'feed-focused' : ''}`}>
       <header className="feed-top">
-        <div className="feed-tabs">
-          <button
-            className={!id && mode === 'school' ? 'active' : ''}
-            onClick={() => {
-              setMode('school');
-              if (id) navigate('/');
-            }}
-          >
-            {t('Сегодня', 'Бүгін')}
-          </button>
-          <button
-            className={!id && mode === 'foryou' ? 'active' : ''}
-            onClick={() => {
-              setMode('foryou');
-              if (id) navigate('/');
-            }}
-          >
-            {t('Для тебя', 'Саған')}
-          </button>
-          <button
-            className={!id && mode === 'free' ? 'active' : ''}
-            onClick={() => {
-              setMode('free');
-              if (id) navigate('/');
-            }}
-          >
-            {t('По интересам', 'Қызығушылықтар')}
-          </button>
-          {id && <span className="active">{t('Сезон', 'Маусым')}</span>}
-        </div>
+        {id ? (
+          <div className="feed-topic-nav">
+            <Link to="/" aria-label={t('Вернуться в ленту', 'Лентаға оралу')}>
+              <ArrowLeft size={20} />
+              <span>{t('Лента', 'Лента')}</span>
+            </Link>
+            <span>{t('Серии темы', 'Тақырып сериялары')}</span>
+          </div>
+        ) : (
+          <div className="feed-tabs">
+            <button
+              className={!id && mode === 'school' ? 'active' : ''}
+              onClick={() => {
+                setMode('school');
+                if (id) navigate('/');
+              }}
+            >
+              {t('Сегодня', 'Бүгін')}
+            </button>
+            <button
+              className={!id && mode === 'foryou' ? 'active' : ''}
+              onClick={() => {
+                setMode('foryou');
+                if (id) navigate('/');
+              }}
+            >
+              {t('Для тебя', 'Саған')}
+            </button>
+            <button
+              className={!id && mode === 'free' ? 'active' : ''}
+              onClick={() => {
+                setMode('free');
+                if (id) navigate('/');
+              }}
+            >
+              {t('По интересам', 'Қызығушылықтар')}
+            </button>
+          </div>
+        )}
         <div className="feed-toolbar">
           <button
             className="focus-toggle"
@@ -682,15 +692,19 @@ export function Feed() {
                 {t('↑ ↓ — листать · пробел — пауза', '↑ ↓ — ауыстыру · бос орын — кідірту')}
               </p>
               <div className={`feed-actions ${atEnd ? 'hidden-actions' : ''}`}>
-                <button onClick={() => setModal('chapters')} aria-label="Содержание сезона">
+                <button
+                  className="series-action"
+                  onClick={() => setModal('chapters')}
+                  aria-label="Содержание сезона"
+                >
                   <span>
-                    <BookOpen size={25} />
+                    <SeriesIcon />
                   </span>
                   <small>{t('Сезон', 'Маусым')}</small>
                 </button>
                 <button onClick={() => open('quiz')} aria-label="Пройти тест">
                   <span className="action-mint">
-                    <ListChecks size={25} />
+                    <CircleHelp size={27} />
                   </span>
                   <small>{t('Тест', 'Тест')}</small>
                 </button>
@@ -942,6 +956,25 @@ export function Feed() {
 }
 function ArrowUpRightIcon() {
   return <ArrowRight size={16} />;
+}
+function SeriesIcon() {
+  return (
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 28 28"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 3h10M6 6h16" />
+      <rect x="4" y="10" width="20" height="15" rx="4" />
+      <path d="m12 14 6 3.5-6 3.5z" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
 function FeedVideo({
   clip,

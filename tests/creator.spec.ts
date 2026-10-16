@@ -267,6 +267,8 @@ test('double tap likes once, preserves playback and persists after reload on mob
   const tap = page.locator('.video-play-layer').first();
   await tap.dblclick();
   await expect(page.locator('.like-action')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.like-action > span')).toHaveCSS('color', 'rgb(255, 64, 88)');
+  await expect(page.getByRole('link', { name: 'Вернуться в ленту' })).toBeVisible();
   await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
   await tap.dblclick();
   await expect(page.locator('.like-action small')).toHaveText('1');
