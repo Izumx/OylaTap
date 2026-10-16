@@ -15,6 +15,8 @@ import {
   Mic,
   ListChecks,
   CircleHelp,
+  UserRound,
+  ChartNoAxesCombined,
   Forward,
   X,
   Search,
@@ -2142,37 +2144,82 @@ export function ProfilePage() {
     loadRecords().catch((e) => notify(e.message));
   }, [loadRecords]);
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow={t('ТВОЙ АККАУНТ', 'СЕНІҢ АККАУНТЫҢ')}
-        title={t('Как тебе удобно', 'Өзіңе ыңғайлы')}
-        description={t('Настрой обучение под себя.', 'Оқуды өзіңе бейімде.')}
-      />
+    <div className="page profile-page">
+      <header className="profile-hero">
+        <div className="profile-hero-top">
+          <span className="profile-avatar" aria-hidden="true">
+            {user!.name.slice(0, 1)}
+          </span>
+          <div>
+            <span className="profile-kicker">{t('МОЙ OYLATAP', 'МЕНІҢ OYLATAP')}</span>
+            <h1>{user!.name}</h1>
+            <p>
+              {user?.role === 'student'
+                ? t(`${user.grade} класс`, `${user.grade} сынып`)
+                : user?.role === 'teacher'
+                  ? t('Учитель', 'Мұғалім')
+                  : t('Автор', 'Автор')}{' '}
+              · {user?.language === 'kk' ? 'Қазақша' : 'Русский'}
+            </p>
+          </div>
+        </div>
+        <Link
+          className="profile-progress-link"
+          to={
+            user?.role === 'teacher'
+              ? '/results'
+              : user?.role === 'creator'
+                ? '/stats'
+                : '/progress'
+          }
+        >
+          <ChartNoAxesCombined size={19} />
+          <span>
+            {user?.role === 'student'
+              ? t('Мой прогресс', 'Менің прогресім')
+              : t('Результаты', 'Нәтижелер')}
+          </span>
+          <ArrowRight size={18} />
+        </Link>
+      </header>
+      <nav className="profile-shortcuts" aria-label={t('Разделы профиля', 'Профиль бөлімдері')}>
+        {user?.role === 'student' && (
+          <a href="#profile-learning">
+            <BookOpen size={17} />
+            {t('Обучение', 'Оқу')}
+          </a>
+        )}
+        <a href="#profile-settings">
+          <UserRound size={17} />
+          {t('Аккаунт', 'Аккаунт')}
+        </a>
+        <a href="#profile-records">
+          <Mic size={17} />
+          {t('Записи', 'Жазбалар')}
+        </a>
+      </nav>
+      {user?.role === 'student' && <LearningPreferences />}
       <section className="panel appearance-panel">
         <Moon size={23} />
         <label>
           <span>
             <b>{t('Спокойное оформление', 'Жайлы безендіру')}</b>
-            <small>
-              {t(
-                'Приглушённые акценты и меньше анимации. Настройка сохраняется на этом устройстве.',
-                'Жұмсақ түстер және аз анимация. Баптау осы құрылғыда сақталады.',
-              )}
-            </small>
+            <small>{t('Мягкие цвета и меньше анимации.', 'Жұмсақ түстер және аз анимация.')}</small>
           </span>
           <input type="checkbox" checked={comfort} onChange={(e) => setComfort(e.target.checked)} />
         </label>
       </section>
-      {user?.role === 'student' && <LearningPreferences />}
       <div className="profile-grid">
-        <section className="panel">
-          <div className="profile-identity">
-            <span className="avatar large">{user!.name[0]}</span>
-            <div>
-              <h2>{user!.name}</h2>
-              <p>{user!.email}</p>
-            </div>
-          </div>
+        <details className="panel profile-account" id="profile-settings">
+          <summary>
+            <UserRound size={21} />
+            <span>
+              {t('Личные данные', 'Жеке деректер')}
+              <small>{t('Имя, класс и язык', 'Аты, сынып және тіл')}</small>
+            </span>
+            <ChevronDown size={18} />
+          </summary>
+          <p className="profile-email">{user!.email}</p>
           <form
             className="form-stack"
             onSubmit={async (e) => {
@@ -2232,9 +2279,13 @@ export function ProfilePage() {
               )}
             </p>
           )}
-        </section>
-        <section className="panel">
-          <h2>{t('Твои голосовые записи', 'Дауыстық жазбаларың')}</h2>
+        </details>
+        <section className="panel profile-records" id="profile-records">
+          <div className="profile-section-title">
+            <Mic size={21} />
+            <h2>{t('Мои пересказы', 'Мазмұндауларым')}</h2>
+            <span>{records.length}</span>
+          </div>
           <p className="muted">
             {t(
               'Записи доступны тебе и учителю класса, которому назначен сезон.',

@@ -1,0 +1,337 @@
+.profile-page {
+  max-width: 1000px;
+}
+.profile-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 26px;
+  border: 1px solid #bad49e35;
+  border-radius: 24px;
+  background: radial-gradient(ellipse at 100% 0%, #bad49e22, transparent 60%), #19231f;
+}
+.profile-hero-top {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.profile-hero-top > div {
+  min-width: 0;
+}
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
+  background: #d6efbd;
+  color: #263621;
+  font-size: 30px;
+  font-weight: 800;
+  transform: rotate(-5deg);
+}
+.profile-kicker {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #bad49e;
+  font-weight: 700;
+}
+.profile-hero h1 {
+  font-size: 28px;
+  line-height: 1.25;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.profile-hero p {
+  color: #adbcaf;
+  font-size: 13px;
+  margin: 0;
+}
+.profile-progress-link {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid #ffffff12;
+  font-size: 14px;
+  color: #d9edc9;
+}
+.profile-progress-link > svg:last-child {
+  margin-left: auto;
+}
+.profile-shortcuts {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0 24px;
+}
+.profile-shortcuts a {
+  display: flex;
+  flex: 1;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid #ffffff18;
+  border-radius: 14px;
+  font-size: 12px;
+  color: #cbd5cd;
+}
+.profile-shortcuts a:hover {
+  background: #ffffff08;
+}
+.profile-page .panel {
+  border-radius: 20px;
+  padding: 24px;
+  border-color: #ffffff16;
+  background: #191f21;
+}
+.profile-page .learning-preferences {
+  max-width: none;
+  margin-bottom: 16px;
+}
+.profile-page .learning-preferences > p {
+  margin: 12px 0 20px;
+  line-height: 1.65;
+}
+.profile-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.profile-section-title > svg {
+  color: #bad49e;
+  flex-shrink: 0;
+}
+.profile-page .profile-section-title h2 {
+  font-size: 19px;
+  margin: 0;
+  line-height: 1.3;
+}
+.profile-section-title > span {
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #c8d9bb;
+  background: #bad49e14;
+}
+.profile-page .interest-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.profile-page .interest-options > label {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 16px;
+  gap: 9px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #131a1b;
+  border: 1px solid #ffffff14;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+.profile-page .interest-options > label > svg {
+  grid-column: 1;
+  color: #a0b4a5;
+}
+.profile-page .interest-options > label > span {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.profile-page .interest-options input {
+  grid-column: 2;
+  grid-row: 1;
+  width: 16px;
+  height: 16px;
+  accent-color: #bad49e;
+}
+.profile-page .interest-options > label.selected {
+  border-color: #bad49e88;
+  background: #bad49e0e;
+}
+.profile-page .interest-options > label.selected > svg {
+  color: #d6efbd;
+}
+.profile-page .interest-options > label:focus-within {
+  outline: 2px solid #bad49e;
+  outline-offset: 2px;
+}
+.profile-reminder {
+  border: 1px solid #ffffff16;
+  border-radius: 14px;
+  background: #131a1b;
+}
+.profile-reminder summary,
+.profile-account summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  min-height: 50px;
+  padding: 12px;
+}
+.profile-reminder summary::-webkit-details-marker,
+.profile-account summary::-webkit-details-marker {
+  display: none;
+}
+.profile-reminder summary > svg:first-child {
+  color: #bad49e;
+}
+.profile-reminder summary > span {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+}
+.profile-reminder summary small {
+  color: #92a296;
+  font-size: 11px;
+}
+.profile-reminder[open] summary > svg:last-child,
+.profile-account[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.profile-page .reminder-setting {
+  margin: 0 12px 14px;
+  padding-top: 14px;
+}
+.profile-reminder > label {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 14px;
+  font-size: 12px;
+}
+.profile-page .learning-preferences .button {
+  width: 100%;
+  justify-content: center;
+}
+.profile-page .appearance-panel {
+  display: flex;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  max-width: none;
+}
+.profile-page .appearance-panel b {
+  font-size: 14px;
+}
+.profile-page .appearance-panel small {
+  font-size: 12px;
+}
+.profile-page .appearance-panel input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 42px;
+  height: 26px;
+  border: 1px solid #ffffff30;
+  border-radius: 20px;
+  background: #3a4340;
+  position: relative;
+  cursor: pointer;
+}
+.profile-page .appearance-panel input::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: #e5e9e6;
+  transition: transform 160ms ease;
+}
+.profile-page .appearance-panel input:checked {
+  background: #bad49e;
+  border-color: #bad49e;
+}
+.profile-page .appearance-panel input:checked::before {
+  transform: translateX(16px);
+  background: #22311c;
+}
+.profile-page .profile-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.profile-page .profile-account {
+  scroll-margin-top: 80px;
+}
+.profile-account summary {
+  padding: 0;
+}
+.profile-account summary > span {
+  flex: 1;
+  font-weight: 650;
+}
+.profile-account summary small {
+  display: block;
+  font-size: 12px;
+  color: #95a59a;
+  font-weight: 400;
+  margin-top: 5px;
+}
+.profile-account .profile-email {
+  margin: 18px 0;
+  overflow-wrap: anywhere;
+  color: #9aada0;
+  font-size: 13px;
+}
+.profile-records,
+#profile-learning {
+  scroll-margin-top: 80px;
+}
+.profile-page .profile-records > p {
+  font-size: 12px;
+  line-height: 1.65;
+  margin-top: 12px;
+}
+@media (max-width: 720px) {
+  .profile-page {
+    padding-top: 20px;
+  }
+  .profile-hero {
+    padding: 22px 20px;
+  }
+  .profile-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 20px;
+    font-size: 26px;
+  }
+  .profile-hero h1 {
+    font-size: 25px;
+  }
+  .profile-page .panel {
+    padding: 20px 16px;
+  }
+  .profile-page .interest-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .profile-shortcuts {
+    gap: 8px;
+  }
+  .profile-shortcuts a {
+    font-size: 11px;
+  }
+  .profile-page .profile-section-title h2 {
+    font-size: 18px;
+  }
+  .profile-page .appearance-panel {
+    padding: 18px 16px;
+    gap: 12px;
+  }
+  .profile-page .appearance-panel label {
+    gap: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-page .interest-options > label,
+  .profile-page .appearance-panel input::before {
+    transition: none;
+  }
+}
