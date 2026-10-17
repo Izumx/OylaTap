@@ -376,7 +376,9 @@ test('an author signs up in the browser and a learner meets the video in "For yo
   await slide.scrollIntoViewIfNeeded();
   await expect(slide.locator('.video-context')).toContainText('Сейчас по программе 9 класса');
   await expect(slide.locator('.creator')).toContainText('Ерлан Алгебра');
-  await slide.getByRole('button', { name: 'Сообщить об ошибке' }).click();
+  await expect(learner.locator('.season-panel h1')).toHaveText('Ролик для ленты');
+  await learner.getByRole('button', { name: 'Ещё действия' }).click();
+  await learner.getByRole('button', { name: 'Сообщить об ошибке' }).click();
   const r = learner.getByRole('dialog');
   await r.getByRole('button', { name: 'Ошибка в объяснении' }).click();
   await r.getByRole('button', { name: 'Отправить' }).click();

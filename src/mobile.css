@@ -1,4 +1,112 @@
 /* Short, deliberate feedback; nothing loops while a learner watches. */
+.feed-more {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 44px;
+  color: #e1e9df;
+  border-radius: 12px;
+}
+.feed-more:hover {
+  background: #ffffff0d;
+}
+.feed-choice-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+.feed-choice-list > button,
+.feed-choice-list > a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  border: 1px solid #ffffff1c;
+  border-radius: 16px;
+  padding: 18px 16px;
+  color: #e8eee5;
+  background: #ffffff04;
+}
+.feed-choice-list > button:hover,
+.feed-choice-list > a:hover {
+  border-color: #bad49e88;
+  background: #bad49e0b;
+}
+.feed-choice-list > button > svg:first-child,
+.feed-choice-list > a > svg:first-child {
+  color: #bad49e;
+  flex-shrink: 0;
+}
+.feed-choice-list span {
+  flex: 1;
+}
+.feed-choice-list b {
+  font-size: 15px;
+  display: block;
+}
+.feed-choice-list small {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a3b2a7;
+  display: block;
+  margin-top: 5px;
+}
+.video-caption-link {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 650;
+  color: #f1f5ee;
+  text-shadow: 0 1px 4px #0008;
+}
+.video-caption-link span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.video-caption-link svg {
+  flex-shrink: 0;
+}
+.video-context.is-teacher {
+  display: inline-flex;
+  background: #223724d9;
+  color: #e3f1d9;
+  border: 1px solid #bad49e40;
+  backdrop-filter: blur(8px);
+}
+@media (min-width: 901px) {
+  .feed-page:not(.feed-focused) .video-caption-link {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .feed-top .feed-toolbar {
+    gap: 0;
+  }
+  .feed-top .feed-more {
+    width: 36px;
+  }
+  .feed-actions small {
+    max-width: 60px;
+    white-space: normal;
+    line-height: 1.2;
+  }
+  .feed-actions > button {
+    min-height: 54px;
+  }
+  .feed-page .video-bottom {
+    padding-top: 32px;
+  }
+  .video-context.is-teacher {
+    font-size: 10px;
+    line-height: 1.4;
+    max-width: 100%;
+  }
+}
 .library-page .search-field input[type='search'] {
   appearance: none;
   -webkit-appearance: none;

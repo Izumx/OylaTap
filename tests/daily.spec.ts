@@ -318,9 +318,10 @@ test('daily UI resumes unfinished series, explains the source on a phone and kee
       page.locator('.feed-scroll').evaluate((el) => Math.round(el.scrollTop / el.clientHeight)),
     )
     .toBe(1);
-  await expect(page.locator('.feed-slide').nth(1).locator('.video-context')).toHaveText(
-    'Тема класса',
+  await expect(page.locator('.feed-slide').nth(1).locator('.video-context')).toContainText(
+    'От учителя',
   );
+  await page.getByRole('button', { name: 'Проверить себя', exact: true }).click();
   await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Проверь понимание' })).toBeVisible();
   await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
@@ -371,7 +372,7 @@ test('returning to an open tab refreshes a new day or a changed teacher topic', 
   await nextDay(student);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('.feed-slide video')).toHaveCount(2);
-  await expect(page.locator('.feed-slide h2').first()).toHaveText('Серия 4');
+  await expect(page.locator('.feed-slide video').first()).toHaveAttribute('aria-label', 'Серия 4');
   await setTopic(teacher, c.id, second.id);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('.feed-slide video')).toHaveCount(3);

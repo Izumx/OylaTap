@@ -18,6 +18,7 @@ import {
   UserRound,
   ChartNoAxesCombined,
   Forward,
+  Ellipsis,
   X,
   Search,
   SlidersHorizontal,
@@ -163,7 +164,7 @@ export function Feed() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const startEpisode = Math.max(0, Number(searchParams.get('episode') || 0));
-  const [mode, setMode] = useState<'school' | 'free' | 'foryou'>('school'),
+  const [mode, setMode] = useState<'school' | 'foryou'>('school'),
     [focus, setFocus] = useState(() => localStorage.getItem('oylatap-feed-focus') !== 'off'),
     [today, setToday] = useState<DailySession | null>(null),
     [dailyStart, setDailyStart] = useState(0),
@@ -175,7 +176,9 @@ export function Feed() {
     [error, setError] = useState(''),
     [active, setActive] = useState(0),
     [muted, setMuted] = useState(true),
-    [modal, setModal] = useState<'quiz' | 'record' | 'chapters' | 'notes' | 'report' | null>(null),
+    [modal, setModal] = useState<
+      'quiz' | 'record' | 'chapters' | 'notes' | 'report' | 'learn' | 'more' | null
+    >(null),
     [version, setVersion] = useState(0);
   const scroll = useRef<HTMLDivElement>(null);
   const slideHeight = useRef(0);
@@ -260,7 +263,7 @@ export function Feed() {
     clips.length > 0 && clips.every((c) => c.episode.completed && passed.has(c.episode.id));
   const sourceLabel =
     today?.topic_source === 'class'
-      ? t('Тема класса', 'Сынып тақырыбы')
+      ? t('От учителя', 'Мұғалімнен')
       : today?.topic_source === 'assignment'
         ? t('Задание учителя', 'Мұғалім тапсырмасы')
         : today?.topic_source === 'personal'
@@ -350,6 +353,7 @@ export function Feed() {
   }
   const open = (kind: 'quiz' | 'record') => {
     if (!user) {
+      setModal(null);
       login();
       return;
     }
@@ -473,15 +477,6 @@ export function Feed() {
             >
               {t('Для тебя', 'Саған')}
             </button>
-            <button
-              className={!id && mode === 'free' ? 'active' : ''}
-              onClick={() => {
-                setMode('free');
-                if (id) navigate('/');
-              }}
-            >
-              {t('По интересам', 'Қызығушылықтар')}
-            </button>
           </div>
         )}
         <div className="feed-toolbar">
@@ -500,6 +495,14 @@ export function Feed() {
           <Link className="feed-search" to="/library" aria-label="Найти сезон">
             <Search size={20} />
           </Link>
+          <button
+            className="feed-more"
+            aria-label={t('Ещё действия', 'Басқа әрекеттер')}
+            disabled={!current}
+            onClick={() => setModal('more')}
+          >
+            <Ellipsis size={23} />
+          </button>
         </div>
       </header>
       <State loading={loading} error={error} retry={reload}>
@@ -544,7 +547,15 @@ export function Feed() {
                   <div className="feed-slide" key={c.episode.id}>
                     <FeedVideo
                       clip={c}
-                      context={c.reason || (today ? sourceLabel : undefined)}
+                      context={
+                        c.reason ||
+                        (today
+                          ? `${sourceLabel}${today.class_name ? ` · ${today.class_name}` : ''}`
+                          : undefined)
+                      }
+                      teacherSource={Boolean(
+                        today && ['class', 'assignment'].includes(today.topic_source || ''),
+                      )}
                       personal={Boolean(c.reason)}
                       active={i === active && !modal && !micro && !authOpen}
                       muted={muted}
@@ -554,9 +565,8 @@ export function Feed() {
                           if (generation === feedGeneration.current) setMicro(c.episode);
                         });
                       }}
-                      onQuiz={() => open('quiz')}
+                      onQuiz={() => setModal('learn')}
                       onLike={() => like(c, true)}
-                      onReport={() => (user ? setModal('report') : login())}
                     />
                   </div>
                 ))}
@@ -704,17 +714,14 @@ export function Feed() {
                   </span>
                   <small>{t('Сезон', 'Маусым')}</small>
                 </button>
-                <button onClick={() => open('quiz')} aria-label="Пройти тест">
+                <button
+                  onClick={() => setModal('learn')}
+                  aria-label={t('Проверить себя', 'Өзіңді тексер')}
+                >
                   <span className="action-mint">
                     <CircleHelp size={27} />
                   </span>
-                  <small>{t('Тест', 'Тест')}</small>
-                </button>
-                <button onClick={() => open('record')} aria-label="Записать пересказ">
-                  <span>
-                    <Mic size={24} />
-                  </span>
-                  <small>{t('Пересказ', 'Мазмұндау')}</small>
+                  <small>{t('Проверить себя', 'Өзіңді тексер')}</small>
                 </button>
                 <button
                   className="like-action"
@@ -726,12 +733,6 @@ export function Feed() {
                     <Heart size={23} fill="currentColor" />
                   </span>
                   <small>{current?.episode.likes || t('Нравится', 'Ұнайды')}</small>
-                </button>
-                <button onClick={() => void share()} aria-label="Поделиться сезоном">
-                  <span>
-                    <Forward size={25} />
-                  </span>
-                  <small>{t('Поделиться', 'Бөлісу')}</small>
                 </button>
                 <button
                   className="sound-action"
@@ -870,6 +871,91 @@ export function Feed() {
           </div>
         )}
       </State>
+      {current && modal === 'learn' && (
+        <Modal title={t('Проверить себя', 'Өзіңді тексер')} onClose={() => setModal(null)}>
+          <p className="muted">{current.season.title}</p>
+          <div className="feed-choice-list">
+            <button onClick={() => open('quiz')} aria-label="Пройти тест">
+              <CircleHelp />
+              <span>
+                <b>{t('Пройти тест', 'Тест тапсыру')}</b>
+                <small>
+                  {t(
+                    'Ответь на вопросы и разбери ошибки.',
+                    'Сұрақтарға жауап беріп, қателерді талда.',
+                  )}
+                </small>
+              </span>
+              <ArrowRight size={19} />
+            </button>
+            <button onClick={() => open('record')} aria-label="Записать пересказ">
+              <Mic />
+              <span>
+                <b>{t('Объяснить своими словами', 'Өз сөзіңмен түсіндір')}</b>
+                <small>
+                  {t(
+                    'Голосом или текстом. По желанию или заданию учителя.',
+                    'Дауыспен не мәтінмен. Қалауыңша немесе тапсырма бойынша.',
+                  )}
+                </small>
+              </span>
+              <ArrowRight size={19} />
+            </button>
+          </div>
+        </Modal>
+      )}
+      {current && modal === 'more' && (
+        <Modal
+          title={t('Настройки и действия', 'Баптаулар мен әрекеттер')}
+          onClose={() => setModal(null)}
+        >
+          <div className="feed-choice-list">
+            <Link to="/profile#profile-learning" onClick={() => setModal(null)}>
+              <SlidersHorizontal />
+              <span>
+                <b>{t('Настроить интересы', 'Қызығушылықтарды баптау')}</b>
+                <small>
+                  {t(
+                    'Предметы и темы для ленты «Для тебя».',
+                    '«Саған» лентасына арналған пәндер мен тақырыптар.',
+                  )}
+                </small>
+              </span>
+              <ArrowRight size={19} />
+            </Link>
+            <button onClick={() => setModal('notes')}>
+              <BookOpen />
+              <span>
+                <b>{t('Конспект серии', 'Серия мәтіні')}</b>
+              </span>
+              <ArrowRight size={19} />
+            </button>
+            <button onClick={() => void share()} aria-label="Поделиться сезоном">
+              <Forward />
+              <span>
+                <b>{t('Поделиться темой', 'Тақырыппен бөлісу')}</b>
+              </span>
+              <ArrowRight size={19} />
+            </button>
+            <button
+              onClick={() => {
+                if (user) setModal('report');
+                else {
+                  setModal(null);
+                  login();
+                }
+              }}
+              aria-label="Сообщить об ошибке"
+            >
+              <Flag />
+              <span>
+                <b>{t('Сообщить об ошибке', 'Қате туралы хабарлау')}</b>
+              </span>
+              <ArrowRight size={19} />
+            </button>
+          </div>
+        </Modal>
+      )}
       {micro && (
         <MicroQuestion
           episode={micro}
@@ -982,24 +1068,24 @@ function FeedVideo({
   clip,
   context,
   personal = false,
+  teacherSource = false,
   active,
   muted,
   onEnded,
   onQuiz,
-  onReport,
   onLike,
 }: {
   clip: Clip;
   context?: string;
   personal?: boolean;
+  teacherSource?: boolean;
   active: boolean;
   muted: boolean;
   onEnded: () => void;
   onQuiz: () => void;
-  onReport: () => void;
   onLike: () => Promise<boolean>;
 }) {
-  const { t, user, locale } = useApp();
+  const { t, user } = useApp();
   // Demo topics belong to the platform; an author's lesson always carries the author's name.
   const authorName =
     clip.season.owner_role !== 'creator' && clip.season.source_name?.startsWith('Демонстрационные')
@@ -1008,7 +1094,6 @@ function FeedVideo({
   const ref = useRef<HTMLVideoElement>(null);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [burst, setBurst] = useState(0);
-  const genericTitle = /^Серия\s*\d+$/i.test(clip.episode.title);
   useEffect(() => {
     if (!active) setBurst(0);
     return () => {
@@ -1159,7 +1244,10 @@ function FeedVideo({
         {/* The session label above the player already names the source on wide screens;
             a personal reason is new information everywhere. */}
         {context && (
-          <p className={`video-context ${personal ? 'is-reason' : 'is-source'}`}>
+          <p
+            className={`video-context ${teacherSource ? 'is-teacher' : personal ? 'is-reason' : 'is-source'}`}
+          >
+            {teacherSource && <BookOpen size={13} />}
             {personal && <Sparkles size={13} />}
             {context}
           </p>
@@ -1173,19 +1261,10 @@ function FeedVideo({
             {clip.season.language === 'kk' ? 'Қазақша' : 'Русский'}
           </span>
         </div>
-        <h2>{genericTitle ? clip.season.title : clip.episode.title}</h2>
-        <div className="video-meta-row">
-          <Link to={`/learn/${clip.season.id}`} className="video-season-link">
-            <BookOpen size={14} />
-            {genericTitle
-              ? `${subjects[clip.season.subject]?.[locale === 'kk' ? 1 : 0]} · ${clip.season.grade} ${t('класс', 'сынып')}`
-              : clip.season.title}
-          </Link>
-          <button className="video-report" onClick={onReport} aria-label="Сообщить об ошибке">
-            <Flag size={13} />
-            {t('Ошибка?', 'Қате?')}
-          </button>
-        </div>
+        <Link to={`/learn/${clip.season.id}`} className="video-caption-link">
+          <span>{clip.season.title}</span>
+          <ArrowRight size={15} />
+        </Link>
         {pct >= 98 && (
           <button className="button primary video-quiz" onClick={onQuiz}>
             {t('Что ты понял? Проверим', 'Түсінгеніңді тексерейік')}

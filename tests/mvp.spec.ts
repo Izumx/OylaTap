@@ -92,6 +92,7 @@ test('guest feed plays actual video, navigates chapters and works on a phone', a
       page.locator('.feed-scroll').evaluate((el) => Math.round(el.scrollTop / el.clientHeight)),
     )
     .toBe(2);
+  await page.getByRole('button', { name: 'Проверить себя', exact: true }).click();
   await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(errors).toEqual([]);
@@ -101,6 +102,7 @@ test('quiz grades on server, explains mistakes, persists progress in PostgreSQL'
 }) => {
   const user = await account(page.request, 'student');
   await page.goto(`/watch/${seed}`);
+  await page.getByRole('button', { name: 'Проверить себя', exact: true }).click();
   await page.getByRole('button', { name: 'Пройти тест', exact: true }).click();
   const d = page.getByRole('dialog');
   await d
@@ -241,6 +243,7 @@ test('audio recording, teacher review, student playback and deletion', async ({
   await account(page.request, 'student');
   await page.request.post('/api/classes/join', { data: { code: c.code } });
   await page.goto(`/watch/${seed}`);
+  await page.getByRole('button', { name: 'Проверить себя', exact: true }).click();
   await page.getByRole('button', { name: 'Записать пересказ', exact: true }).click();
   const d = page.getByRole('dialog');
   await d.getByRole('button', { name: 'Начать запись', exact: true }).click();
@@ -540,6 +543,30 @@ test('quiet feed keeps focus and appearance preferences, and supports pause and 
   await page.screenshot({ path: '.local/qa/feed-comfort-desktop.png' });
 });
 
+test('compact feed has two modes, four actions and reachable learning and settings menus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('.feed-tabs > button')).toHaveCount(2);
+  await expect(page.locator('.feed-actions > button')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Ещё действия' }).click();
+  const menu = page.getByRole('dialog', { name: 'Настройки и действия' });
+  await expect(menu.getByRole('link', { name: /Настроить интересы/ })).toHaveAttribute(
+    'href',
+    '/profile#profile-learning',
+  );
+  await expect(menu.getByRole('button', { name: 'Поделиться сезоном' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Сообщить об ошибке' })).toBeVisible();
+  await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await page.getByRole('button', { name: 'Проверить себя', exact: true }).click();
+  const learning = page.getByRole('dialog', { name: 'Проверить себя' });
+  await expect(learning.getByRole('button', { name: 'Пройти тест', exact: true })).toBeVisible();
+  await expect(
+    learning.getByRole('button', { name: 'Записать пересказ', exact: true }),
+  ).toBeVisible();
+});
+
 test('phone feed fills the screen, keeps controls reachable and does not overflow', async ({
   page,
 }) => {
@@ -551,7 +578,12 @@ test('phone feed fills the screen, keeps controls reachable and does not overflo
     .toBeGreaterThan(0);
   await expect(page.locator('.mobile-header')).toBeHidden();
   await expect(page.locator('.bottom-nav')).toBeVisible();
-  for (const name of ['Содержание сезона', 'Пройти тест', 'Записать пересказ', 'Включить звук']) {
+  for (const name of [
+    'Содержание сезона',
+    'Проверить себя',
+    'Нравится объяснение',
+    'Включить звук',
+  ]) {
     const box = await page.getByRole('button', { name, exact: true }).boundingBox();
     expect(box).toBeTruthy();
     expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -563,7 +595,5 @@ test('phone feed fills the screen, keeps controls reachable and does not overflo
   await page.screenshot({ path: '.local/qa/feed-comfort-mobile.png' });
   await page.setViewportSize({ width: 360, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await expect(
-    page.getByRole('button', { name: 'Записать пересказ', exact: true }),
-  ).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Проверить себя', exact: true })).toBeInViewport();
 });
