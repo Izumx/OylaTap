@@ -224,6 +224,52 @@ app.get('/api/catalog', async (req, res) =>
     ),
   ),
 );
+// Public author page: only people who publish (teachers and authors) have one;
+// learners' names are never exposed through it.
+const authorProfile = (id: string, viewer: string | null) =>
+  one(
+    `SELECT u.id,u.name,u.role,u.trust_level,
+     (SELECT count(*)::int FROM author_follows f WHERE f.author_id=u.id) followers,
+     EXISTS(SELECT 1 FROM author_follows f WHERE f.author_id=u.id AND f.user_id=$2) following
+     FROM users u WHERE u.id=$1 AND u.role IN ('teacher','creator')`,
+    [id, viewer],
+  );
+app.get('/api/authors/:id', async (req, res) => {
+  const id = uid.parse(req.params.id);
+  const profile = await authorProfile(id, req.user?.id || null);
+  if (!profile) notFound();
+  const seasons = await rows(
+    catalogSql +
+      " WHERE s.owner_id=$2 AND s.status='published' AND " +
+      visibilitySql +
+      ' ORDER BY s.published_at DESC NULLS LAST,s.id',
+    [req.user?.id || null, id],
+  );
+  const { likes } = (await one(
+    `SELECT count(*)::int likes FROM episode_likes l JOIN episodes e ON e.id=l.episode_id
+     WHERE e.season_id=ANY($1::uuid[])`,
+    [seasons.map((s) => s.id)],
+  ))!;
+  res.json({ ...profile, likes, seasons });
+});
+app.post('/api/authors/:id/follow', required, async (req, res) => {
+  const id = uid.parse(req.params.id);
+  const { following } = z.object({ following: z.boolean() }).parse(req.body);
+  if (id === req.user!.id) fail('Нельзя подписаться на себя');
+  if (!(await authorProfile(id, req.user!.id))) notFound();
+  if (following)
+    await db.query(
+      'INSERT INTO author_follows(user_id,author_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+      [req.user!.id, id],
+    );
+  else
+    await db.query('DELETE FROM author_follows WHERE user_id=$1 AND author_id=$2', [
+      req.user!.id,
+      id,
+    ]);
+  const profile = (await authorProfile(id, req.user!.id))!;
+  res.json({ following: profile.following, followers: profile.followers });
+});
 app.get('/api/my-seasons', required, author, async (req, res) =>
   res.json(
     await rows(catalogSql + ' WHERE s.owner_id=$2 ORDER BY s.created_at DESC', [
@@ -236,9 +282,10 @@ app.get('/api/seasons/:id', async (req, res) => {
   const id = uid.parse(req.params.id);
   const s = await one(
     `SELECT s.*,u.name owner_name,u.role owner_role,u.trust_level owner_trust,
+     EXISTS(SELECT 1 FROM author_follows f WHERE f.author_id=s.owner_id AND f.user_id=$2) owner_followed,
      t.title_ru topic_title_ru,t.title_kk topic_title_kk
      FROM seasons s JOIN users u ON u.id=s.owner_id LEFT JOIN curriculum_topics t ON t.id=s.topic_id WHERE s.id=$1`,
-    [id],
+    [id, req.user?.id || null],
   );
   // Moderators inspect any season, including answers, before it reaches learners.
   const inspector = Boolean(req.user?.is_moderator);

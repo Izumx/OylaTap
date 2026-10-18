@@ -92,7 +92,9 @@ export type Season = {
   topic_id?: string | null;
   topic_title_ru?: string | null;
   topic_title_kk?: string | null;
+  owner_id?: string;
   owner_name?: string;
+  owner_followed?: boolean;
   owner_role?: string;
   owner_trust?: string;
   hidden?: boolean;

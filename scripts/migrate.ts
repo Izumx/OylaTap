@@ -17,6 +17,7 @@ try {
     '007_demo_final_questions',
     '008_creator_platform',
     '009_curriculum_topics',
+    '010_author_follows',
   ]) {
     if (
       !(await client.query('SELECT name FROM schema_migrations WHERE name=$1', [name])).rowCount

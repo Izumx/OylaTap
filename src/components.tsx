@@ -101,6 +101,21 @@ export function Shell({ children, feed = false }: { children: ReactNode; feed?: 
               ? t('Создать видео', 'Видео жасау')
               : t('Создать сезон', 'Маусым жасау')}
           </Link>
+        ) : !user ? (
+          <div className="side-note author-cta">
+            <span className="tiny-pill">{t('ДЛЯ АВТОРОВ', 'АВТОРЛАРҒА')}</span>
+            <Clapperboard size={25} />
+            <p>{t('Знаешь тему? Объясни её.', 'Тақырыпты білесің бе? Түсіндір.')}</p>
+            <small>
+              {t(
+                'Голос или текст — видео соберём без монтажа.',
+                'Дауыс не мәтін — видеоны монтажсыз жинаймыз.',
+              )}
+            </small>
+            <button className="button secondary full" onClick={login}>
+              {t('Стать автором', 'Автор болу')}
+            </button>
+          </div>
         ) : (
           <div className="side-note">
             <span className="tiny-pill">{t('ПО ЧУТЬ-ЧУТЬ, КАЖДЫЙ ДЕНЬ', 'КҮНДЕ АЗ-АЗДАН')}</span>

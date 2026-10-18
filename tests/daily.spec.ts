@@ -154,7 +154,7 @@ test('daily portion stays fixed across concurrent requests, devices, reload and 
       .rows[0].n,
   ).toBe(1);
   const page = await secondDevice.newPage();
-  await page.goto('/');
+  await page.goto('/?feed=today');
   await expect(page.locator('.session-end')).toBeInViewport({ ratio: 0.95 });
   await expect(page.getByRole('heading', { name: 'Цель дня выполнена' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Продолжить тему сейчас' })).toHaveAttribute(
@@ -312,7 +312,7 @@ test('daily UI resumes unfinished series, explains the source on a phone and kee
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?feed=today');
   await expect
     .poll(() =>
       page.locator('.feed-scroll').evaluate((el) => Math.round(el.scrollTop / el.clientHeight)),
@@ -367,7 +367,7 @@ test('returning to an open tab refreshes a new day or a changed teacher topic', 
   const initial = await plan(student);
   await finish(student, initial.episode_ids);
   const page = await student.context.newPage();
-  await page.goto('/');
+  await page.goto('/?feed=today');
   await expect(page.locator('.session-end')).toBeInViewport({ ratio: 0.95 });
   await nextDay(student);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));

@@ -1,0 +1,129 @@
+/* Concept 3.0: authors in the feed, author page and the endless feed tail. */
+.creator-link {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.creator-link > span:nth-child(2) {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.creator-link:hover > span:nth-child(2),
+.creator-link:focus-visible > span:nth-child(2) {
+  text-decoration: underline;
+}
+.follow-button {
+  border: 1px solid #ffffff59;
+  background: #ffffff1f;
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.follow-button.following {
+  background: transparent;
+  color: #ced8d0;
+  border-color: #ffffff30;
+}
+.follow-button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.feed-slide.feed-tail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 24px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(155deg, #253c26, #142317);
+}
+.feed-tail p {
+  max-width: 34ch;
+  color: #ced8d0;
+}
+.feed-tail .button {
+  max-width: 320px;
+}
+
+.author-page {
+  display: grid;
+  gap: 28px;
+}
+.author-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.author-head > div {
+  flex: 1;
+  min-width: 200px;
+}
+.author-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.author-head h1 svg {
+  color: var(--mint);
+}
+.author-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--mint);
+  color: #213820;
+  font-size: 26px;
+  font-weight: 900;
+  flex: none;
+}
+.author-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+.author-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+@media (max-width: 560px) {
+  .author-head .button {
+    width: 100%;
+  }
+}
+
+/* The quiet design hides sidebar notes; the invitation to authors stays for guests. */
+.side-note.author-cta {
+  display: block;
+  margin-top: 24px;
+}
+.author-cta > svg {
+  display: block;
+  margin-top: 12px;
+}
+.author-cta small {
+  display: block;
+  margin-bottom: 14px;
+}
+@media (max-height: 760px) {
+  .side-note.author-cta {
+    display: none;
+  }
+}

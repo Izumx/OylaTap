@@ -11,12 +11,14 @@ import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from '.
 import { StudioPage, EditorPage, ClassesPage } from './Teacher';
 import { ResultsPage } from './Results';
 import { StatsPage, ModerationPage } from './Creator';
+import { AuthorPage } from './Authors';
 import './style.css';
 import './comfort.css';
 import './reports.css';
 import './polish.css';
 import './mobile.css';
 import './profile.css';
+import './authors.css';
 function App() {
   const loc = useLocation();
   return (
@@ -26,6 +28,7 @@ function App() {
         <Route path="/watch/:id" element={<Feed />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/learn/:id" element={<SeasonPage />} />
+        <Route path="/author/:id" element={<AuthorPage />} />
         <Route
           path="/attempts"
           element={

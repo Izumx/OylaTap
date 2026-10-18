@@ -882,11 +882,15 @@ export function EditorPage() {
                     value={draft.voice}
                     onChange={(e) => set('voice', e.target.value as Draft['voice'])}
                   >
+                    {/* Concept 3.0: a live voice is the main way to explain; text-only stays. */}
+                    <option value="own">
+                      {t(
+                        'Мой голос — рекомендуем: запишу каждую серию',
+                        'Өз дауысым — ұсынамыз: әр серияны жазамын',
+                      )}
+                    </option>
                     <option value="none">
                       {t('Без озвучки, только текст', 'Дыбыссыз, тек мәтін')}
-                    </option>
-                    <option value="own">
-                      {t('Мой голос: запишу каждую серию', 'Өз дауысым: әр серияны жазамын')}
                     </option>
                     <option value="tts" disabled={!ai.data?.tts?.[draft.language]}>
                       {ai.data?.tts?.[draft.language]

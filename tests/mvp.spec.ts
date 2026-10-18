@@ -72,7 +72,7 @@ test.afterAll(async () => {
 test('guest feed plays actual video, navigates chapters and works on a phone', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?feed=today');
   const first = page.locator('.feed-slide').first().locator('video');
   await expect
     .poll(() => first.evaluate((v: HTMLVideoElement) => v.currentTime))
@@ -360,7 +360,7 @@ test('today has three clips, checks understanding after video and ends without l
   page,
 }) => {
   const user = await account(page.request, 'student');
-  await page.goto('/');
+  await page.goto('/?feed=today');
   await expect(page.locator('.feed-slide')).toHaveCount(4);
   const first = page.locator('.feed-slide').first().locator('video');
   await expect.poll(() => first.evaluate((v: HTMLVideoElement) => v.duration)).toBeGreaterThan(0);

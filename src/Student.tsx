@@ -53,21 +53,33 @@ import {
 import { Modal, State, PageHeader, SeasonArt, SeasonCard } from './components';
 import { LearningPreferences } from './Learning';
 
-type Clip = { season: Season; episode: Episode; reason?: string };
+// `key` stays unique when the endless feed shows an episode again.
+type Clip = { season: Season; episode: Episode; reason?: string; key?: string };
 type ForYou = {
   week: number | null;
   items: { season_id: string; episode_id: string; reason: string }[];
+  exhausted: boolean;
+};
+// Concept 3.0: a soft break after long continuous watching. A suggestion, never a lock.
+const breakAfterSeconds = (comfort: boolean) => {
+  try {
+    const custom = Number(localStorage.getItem('oylatap-break-after-seconds'));
+    if (custom > 0) return custom;
+  } catch {}
+  return (comfort ? 20 : 40) * 60;
 };
 function MicroQuestion({
   episode,
   onClose,
   onPassed,
   onNext,
+  route = true,
 }: {
   episode: Episode;
   onClose: () => void;
   onPassed: () => void;
   onNext: () => void;
+  route?: boolean;
 }) {
   const r = useResource<any>(`/episodes/${episode.id}/micro`);
   const { t, user } = useApp();
@@ -115,29 +127,37 @@ function MicroQuestion({
             )}
             {error && <p className="error-inline">{error}</p>}
             {!result ? (
-              <button
-                className="button primary full"
-                disabled={answer === null || busy}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    const v = await post(`/episodes/${episode.id}/check`, { answer });
-                    setResult(v);
-                    if (v.passed) onPassed();
-                  } catch (e) {
-                    setError((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {t('Проверить', 'Тексеру')}
-                <ArrowRight size={17} />
-              </button>
+              <>
+                <button
+                  className="button primary full"
+                  disabled={answer === null || busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const v = await post(`/episodes/${episode.id}/check`, { answer });
+                      setResult(v);
+                      if (v.passed) onPassed();
+                    } catch (e) {
+                      setError((e as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {t('Проверить', 'Тексеру')}
+                  <ArrowRight size={17} />
+                </button>
+                {/* The question is part of the feed, not a gate: it can be skipped. */}
+                <button className="text-button full" onClick={onNext}>
+                  {t('Пропустить вопрос', 'Сұрақты өткізу')}
+                </button>
+              </>
             ) : (
               <>
                 <button className="button primary full" onClick={onNext}>
-                  {t('Дальше по маршруту', 'Маршрутты жалғастыру')}
+                  {route
+                    ? t('Дальше по маршруту', 'Маршрутты жалғастыру')
+                    : t('Дальше', 'Әрі қарай')}
                   <ArrowRight size={17} />
                 </button>
                 {!result.passed && (
@@ -164,13 +184,15 @@ export function Feed() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const startEpisode = Math.max(0, Number(searchParams.get('episode') || 0));
-  const [mode, setMode] = useState<'school' | 'foryou'>('school'),
-    [focus, setFocus] = useState(() => localStorage.getItem('oylatap-feed-focus') !== 'off'),
+  // Concept 3.0: the endless personal feed is the main one; "Today" is a short session.
+  // The mode lives in the address, so a reload or a shared link keeps it.
+  const mode: 'school' | 'foryou' = searchParams.get('feed') === 'today' ? 'school' : 'foryou';
+  const [focus, setFocus] = useState(() => localStorage.getItem('oylatap-feed-focus') !== 'off'),
     [today, setToday] = useState<DailySession | null>(null),
     [dailyStart, setDailyStart] = useState(0),
     [micro, setMicro] = useState<Episode | null>(null),
     [passed, setPassed] = useState<Set<string>>(new Set());
-  const { user, t, locale, notify, login, authOpen } = useApp();
+  const { user, t, locale, notify, login, authOpen, comfort } = useApp();
   const [clips, setClips] = useState<Clip[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(''),
@@ -186,6 +208,62 @@ export function Feed() {
   const dailyRef = useRef<DailySession | null>(null);
   const feedGeneration = useRef(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+  // Endless "For you": episodes already shown in this feed, cached seasons and paging state.
+  const shown = useRef<string[]>([]);
+  const seasonCache = useRef(new Map<string, Season>());
+  const paging = useRef({ busy: false, done: false, restarted: false, serial: 0 });
+  const [feedDone, setFeedDone] = useState(false);
+  const fetchBatch = useCallback(async (): Promise<Clip[]> => {
+    const picked: ForYou = await post('/foryou', {
+      language: locale,
+      exclude: shown.current.slice(-400),
+    });
+    const missing = [...new Set(picked.items.map((item) => item.season_id))].filter(
+      (sid) => !seasonCache.current.has(sid),
+    );
+    for (const season of await Promise.all(missing.map((sid) => api<Season>(`/seasons/${sid}`))))
+      seasonCache.current.set(season.id, season);
+    return picked.items.flatMap((item) => {
+      const season = seasonCache.current.get(item.season_id)!;
+      const episode = season.episodes?.find((e) => e.id === item.episode_id);
+      if (!episode) return [];
+      shown.current.push(episode.id);
+      return [
+        { season, episode, reason: item.reason, key: `${episode.id}:${paging.current.serial++}` },
+      ];
+    });
+  }, [locale]);
+  const loadMore = useCallback(async () => {
+    const p = paging.current;
+    if (p.busy || p.done) return;
+    p.busy = true;
+    const generation = feedGeneration.current;
+    try {
+      let next = await fetchBatch();
+      // Nothing new left: start over with the best of what was watched, and say so.
+      if (!next.length && !p.restarted) {
+        p.restarted = true;
+        shown.current = [];
+        next = await fetchBatch();
+        if (next.length)
+          notify(
+            t(
+              'Новые видео закончились — показываем лучшее ещё раз',
+              'Жаңа видеолар бітті — ең жақсыларын қайта көрсетеміз',
+            ),
+          );
+      } else if (next.length) p.restarted = false;
+      if (generation !== feedGeneration.current) return;
+      if (!next.length) {
+        p.done = true;
+        setFeedDone(true);
+      } else setClips((old) => [...old, ...next]);
+    } catch (e) {
+      if (generation === feedGeneration.current) notify((e as Error).message);
+    } finally {
+      p.busy = false;
+    }
+  }, [fetchBatch, notify, t]);
   useEffect(() => {
     let alive = true;
     feedGeneration.current += 1;
@@ -193,25 +271,22 @@ export function Feed() {
     setError('');
     (async () => {
       if (!id && mode === 'foryou') {
-        // Several seasons, each with its next episodes, in the recommended order.
-        const picked = await api<ForYou>(`/foryou?language=${locale}`);
-        const seasons = new Map<string, Season>();
-        for (const item of picked.items)
-          if (!seasons.has(item.season_id))
-            seasons.set(item.season_id, await api<Season>(`/seasons/${item.season_id}`));
+        shown.current = [];
+        seasonCache.current = new Map();
+        paging.current = { busy: false, done: false, restarted: false, serial: 0 };
+        setFeedDone(false);
+        const first = await fetchBatch();
         if (!alive) return;
+        if (!first.length) {
+          paging.current.done = true;
+          setFeedDone(true);
+        }
         setToday(null);
         dailyRef.current = null;
         setPassed(new Set());
         setDailyStart(0);
         setMicro(null);
-        setClips(
-          picked.items.flatMap((item) => {
-            const season = seasons.get(item.season_id)!;
-            const episode = season.episodes?.find((e) => e.id === item.episode_id);
-            return episode ? [{ season, episode, reason: item.reason }] : [];
-          }),
-        );
+        setClips(first);
         setActive(0);
         activeSlide.current = 0;
         scroll.current?.scrollTo(0, 0);
@@ -257,6 +332,30 @@ export function Feed() {
       feedGeneration.current += 1;
     };
   }, [id, user?.id, version, mode, locale]);
+  const endless = !id && mode === 'foryou';
+  // Fetch the next batch while three clips are still ahead, so scrolling never stops.
+  useEffect(() => {
+    if (endless && !loading && clips.length && active >= clips.length - 3) void loadMore();
+  }, [endless, loading, active, clips.length, loadMore]);
+  // Visible time on the endless feed since the last break.
+  const [breakOpen, setBreakOpen] = useState(false);
+  const watchedFor = useRef(0);
+  useEffect(() => {
+    if (!endless) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') watchedFor.current += 1;
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [endless]);
+  // Offered between clips, never in the middle of an explanation.
+  useEffect(() => {
+    if (endless && active > 0 && watchedFor.current >= breakAfterSeconds(comfort))
+      setBreakOpen(true);
+  }, [endless, active, comfort]);
+  const closeBreak = () => {
+    watchedFor.current = 0;
+    setBreakOpen(false);
+  };
   const current = clips[Math.min(active, clips.length - 1)];
   const atEnd = active === clips.length;
   const sessionDone =
@@ -349,6 +448,39 @@ export function Feed() {
     } catch (e) {
       notify((e as Error).message);
       return false;
+    }
+  }
+  // One-way follow: the author's next videos rank higher in "For you".
+  async function follow(clip: Clip) {
+    if (!user) {
+      login();
+      return;
+    }
+    const authorId = clip.season.owner_id!;
+    try {
+      const v = await post(`/authors/${authorId}/follow`, {
+        following: !clip.season.owner_followed,
+      });
+      for (const [sid, season] of seasonCache.current)
+        if (season.owner_id === authorId)
+          seasonCache.current.set(sid, { ...season, owner_followed: v.following });
+      setClips((old) =>
+        old.map((c) =>
+          c.season.owner_id === authorId
+            ? { ...c, season: { ...c.season, owner_followed: v.following } }
+            : c,
+        ),
+      );
+      notify(
+        v.following
+          ? t(
+              'Ты подписан: видео автора будут чаще в ленте',
+              'Жазылдың: автор видеолары жиі шығады',
+            )
+          : t('Подписка отменена', 'Жазылым тоқтатылды'),
+      );
+    } catch (e) {
+      notify((e as Error).message);
     }
   }
   const open = (kind: 'quiz' | 'record') => {
@@ -460,22 +592,16 @@ export function Feed() {
         ) : (
           <div className="feed-tabs">
             <button
-              className={!id && mode === 'school' ? 'active' : ''}
-              onClick={() => {
-                setMode('school');
-                if (id) navigate('/');
-              }}
-            >
-              {t('Сегодня', 'Бүгін')}
-            </button>
-            <button
               className={!id && mode === 'foryou' ? 'active' : ''}
-              onClick={() => {
-                setMode('foryou');
-                if (id) navigate('/');
-              }}
+              onClick={() => navigate('/')}
             >
               {t('Для тебя', 'Саған')}
+            </button>
+            <button
+              className={!id && mode === 'school' ? 'active' : ''}
+              onClick={() => navigate('/?feed=today')}
+            >
+              {t('Сегодня', 'Бүгін')}
             </button>
           </div>
         )}
@@ -508,8 +634,13 @@ export function Feed() {
       <State loading={loading} error={error} retry={reload}>
         {clips.length === 0 ? (
           <div className="empty-state">
-            <h2>{t('Истории скоро появятся', 'Оқиғалар жақында қосылады')}</h2>
-            <p>{t('Учитель ещё не опубликовал сезоны.', 'Мұғалім әлі маусым жарияламады.')}</p>
+            <h2>{t('Видео скоро появятся', 'Видеолар жақында қосылады')}</h2>
+            <p>
+              {t(
+                'Авторы ещё не опубликовали объяснения по этим темам.',
+                'Авторлар бұл тақырыптар бойынша әлі түсіндірме жарияламады.',
+              )}
+            </p>
           </div>
         ) : (
           <div className="feed-body">
@@ -521,9 +652,11 @@ export function Feed() {
                   : mode === 'foryou'
                     ? t('Подобрано для тебя', 'Саған іріктелді')
                     : sourceLabel}
-                <span>
-                  {Math.min(active + 1, clips.length)} / {clips.length}
-                </span>
+                {!endless && (
+                  <span>
+                    {Math.min(active + 1, clips.length)} / {clips.length}
+                  </span>
+                )}
               </div>
               <div
                 className="feed-scroll"
@@ -544,9 +677,10 @@ export function Feed() {
                 aria-label="Вертикальная лента. Листайте вверх или вниз."
               >
                 {clips.map((c, i) => (
-                  <div className="feed-slide" key={c.episode.id}>
+                  <div className="feed-slide" key={c.key || c.episode.id}>
                     <FeedVideo
                       clip={c}
+                      onFollow={() => void follow(c)}
                       context={
                         c.reason ||
                         (today
@@ -557,7 +691,7 @@ export function Feed() {
                         today && ['class', 'assignment'].includes(today.topic_source || ''),
                       )}
                       personal={Boolean(c.reason)}
-                      active={i === active && !modal && !micro && !authOpen}
+                      active={i === active && !modal && !micro && !authOpen && !breakOpen}
                       muted={muted}
                       onEnded={() => {
                         const generation = feedGeneration.current;
@@ -570,135 +704,163 @@ export function Feed() {
                     />
                   </div>
                 ))}
-                <div className="feed-slide session-end">
-                  <div className="end-orbit">
-                    <CheckCheck size={45} />
-                  </div>
-                  <span className="eyebrow">{t('В СВОЁМ ТЕМПЕ', 'ӨЗ ҚАРҚЫНЫҢМЕН')}</span>
-                  <h2>
-                    {t(
-                      sessionDone
-                        ? today?.is_review
-                          ? 'Тема уже пройдена'
-                          : 'Цель дня выполнена'
-                        : 'Сессия закончилась',
-                      sessionDone
-                        ? today?.is_review
-                          ? 'Тақырып аяқталған'
-                          : 'Күндік мақсат орындалды'
-                        : 'Сессия аяқталды',
-                    )}
-                  </h2>
-                  <p>
-                    {t(
-                      'Лента делает паузу. Можно закончить на сегодня или продолжить по желанию.',
-                      'Лента үзіліс жасайды. Бүгін аяқтауға немесе қалауыңша жалғастыруға болады.',
-                    )}
-                  </p>
-                  <div className="end-stats">
-                    <span>
-                      <b>{clips.length}</b>
-                      {t('серии в маршруте', 'маршруттағы серия')}
-                    </span>
-                    <span>
-                      <b>
-                        {passed.size}/{clips.length}
-                      </b>
-                      {t('верных микровопросов', 'дұрыс микросұрақ')}
-                    </span>
-                  </div>
-                  {current && (
-                    <div className="session-next">
-                      {today && !sessionDone ? (
-                        <button
-                          className="button primary full"
-                          onClick={() =>
-                            go(
-                              clips.findIndex(
-                                (clip) => !clip.episode.completed || !passed.has(clip.episode.id),
-                              ),
-                            )
-                          }
-                        >
-                          <RotateCcw size={18} />{' '}
-                          {t('Вернуться к сериям сессии', 'Сессия серияларына оралу')}
-                        </button>
-                      ) : today?.next_step === 'continue' && today.next_episode ? (
-                        <Link
-                          className="button primary full"
-                          to={`/watch/${current.season.id}?episode=${today.next_episode.position}`}
-                        >
-                          <Play size={18} />{' '}
-                          {t('Продолжить тему сейчас', 'Тақырыпты қазір жалғастыру')}
+                {endless ? (
+                  <div className="feed-slide feed-tail">
+                    {feedDone ? (
+                      <>
+                        <div className="end-orbit">
+                          <CheckCheck size={45} />
+                        </div>
+                        <h2>{t('Ты посмотрел все видео', 'Барлық видеоны көрдің')}</h2>
+                        <p>
+                          {t(
+                            'Новые объяснения появятся, когда авторы их опубликуют.',
+                            'Авторлар жариялағанда жаңа түсіндірмелер пайда болады.',
+                          )}
+                        </p>
+                        <Link className="button primary full" to="/library">
+                          {t('Выбрать тему в библиотеке', 'Кітапханадан тақырып таңдау')}
+                          <ArrowRight size={17} />
                         </Link>
-                      ) : today?.next_step === 'retelling' ? (
-                        <button className="button primary full" onClick={() => open('record')}>
-                          <Mic size={18} /> {t('Рассказать своими словами', 'Өз сөзіңмен айту')}
-                        </button>
-                      ) : today?.next_step === 'complete' ? (
-                        <Link className="button primary full" to="/progress">
-                          {t('Посмотреть прогресс', 'Прогресті көру')} <ArrowRight size={18} />
-                        </Link>
-                      ) : (
-                        <button className="button primary full" onClick={() => open('quiz')}>
-                          <ListChecks size={18} />
-                          {t('Закрепить тему: пройти тест', 'Тақырыпты бекіту: тест тапсыру')}
-                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <LoaderCircle size={32} className="spin" />
+                        <p>{t('Подбираем ещё видео…', 'Тағы видео іріктеп жатырмыз…')}</p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="feed-slide session-end">
+                    <div className="end-orbit">
+                      <CheckCheck size={45} />
+                    </div>
+                    <span className="eyebrow">{t('В СВОЁМ ТЕМПЕ', 'ӨЗ ҚАРҚЫНЫҢМЕН')}</span>
+                    <h2>
+                      {t(
+                        sessionDone
+                          ? today?.is_review
+                            ? 'Тема уже пройдена'
+                            : 'Цель дня выполнена'
+                          : 'Сессия закончилась',
+                        sessionDone
+                          ? today?.is_review
+                            ? 'Тақырып аяқталған'
+                            : 'Күндік мақсат орындалды'
+                          : 'Сессия аяқталды',
                       )}
-                      <Link className="text-button" to={`/learn/${current.season.id}`}>
-                        {t('Мой маршрут по теме', 'Тақырып бойынша жолым')}
-                        <ArrowRight size={16} />
-                      </Link>
+                    </h2>
+                    <p>
+                      {t(
+                        'Лента делает паузу. Можно закончить на сегодня или продолжить по желанию.',
+                        'Лента үзіліс жасайды. Бүгін аяқтауға немесе қалауыңша жалғастыруға болады.',
+                      )}
+                    </p>
+                    <div className="end-stats">
+                      <span>
+                        <b>{clips.length}</b>
+                        {t('серии в маршруте', 'маршруттағы серия')}
+                      </span>
+                      <span>
+                        <b>
+                          {passed.size}/{clips.length}
+                        </b>
+                        {t('верных микровопросов', 'дұрыс микросұрақ')}
+                      </span>
                     </div>
-                  )}
-                  {today && (
-                    <div className="tomorrow-topic">
-                      {t('Дальше по теме', 'Тақырып бойынша келесі қадам')}
-                      <strong>
-                        {today.next_episode
-                          ? t(
-                              `Серия ${today.next_episode.position + 1}: ${today.next_episode.title}`,
-                              `${today.next_episode.position + 1}-серия: ${today.next_episode.title}`,
-                            )
-                          : today.next_step === 'quiz'
-                            ? t('Итоговый тест', 'Қорытынды тест')
-                            : today.next_step === 'retelling'
-                              ? t('Объясни своими словами', 'Өз сөзіңмен түсіндір')
-                              : t('Тест и пересказ сохранены', 'Тест пен мазмұндау сақталды')}
-                      </strong>
-                      <small>
-                        {today.next_episode
-                          ? t(
-                              'Сегодняшний набор сохранён. Следующая короткая сессия — завтра. Продолжить тему сейчас можно по желанию.',
-                              'Бүгінгі сериялар сақталды. Келесі қысқа сессия — ертең. Қаласаң, тақырыпты қазір жалғастыр.',
-                            )
-                          : t(
-                              'Конец короткой сессии и результат теста — разные шаги. Результат пересказа оценивает учитель.',
-                              'Қысқа сессияның соңы мен тест нәтижесі — бөлек қадамдар. Мазмұндауды мұғалім бағалайды.',
-                            )}
-                        {!sessionDone && (
-                          <span>
-                            {t(
-                              ' Чтобы завершить маршрут серий, посмотри их и ответь верно на микровопросы.',
-                              ' Сериялар жолын аяқтау үшін оларды көріп, микросұрақтарға дұрыс жауап бер.',
-                            )}
-                          </span>
+                    {current && (
+                      <div className="session-next">
+                        {today && !sessionDone ? (
+                          <button
+                            className="button primary full"
+                            onClick={() =>
+                              go(
+                                clips.findIndex(
+                                  (clip) => !clip.episode.completed || !passed.has(clip.episode.id),
+                                ),
+                              )
+                            }
+                          >
+                            <RotateCcw size={18} />{' '}
+                            {t('Вернуться к сериям сессии', 'Сессия серияларына оралу')}
+                          </button>
+                        ) : today?.next_step === 'continue' && today.next_episode ? (
+                          <Link
+                            className="button primary full"
+                            to={`/watch/${current.season.id}?episode=${today.next_episode.position}`}
+                          >
+                            <Play size={18} />{' '}
+                            {t('Продолжить тему сейчас', 'Тақырыпты қазір жалғастыру')}
+                          </Link>
+                        ) : today?.next_step === 'retelling' ? (
+                          <button className="button primary full" onClick={() => open('record')}>
+                            <Mic size={18} /> {t('Рассказать своими словами', 'Өз сөзіңмен айту')}
+                          </button>
+                        ) : today?.next_step === 'complete' ? (
+                          <Link className="button primary full" to="/progress">
+                            {t('Посмотреть прогресс', 'Прогресті көру')} <ArrowRight size={18} />
+                          </Link>
+                        ) : (
+                          <button className="button primary full" onClick={() => open('quiz')}>
+                            <ListChecks size={18} />
+                            {t('Закрепить тему: пройти тест', 'Тақырыпты бекіту: тест тапсыру')}
+                          </button>
                         )}
-                      </small>
-                    </div>
-                  )}
-                  <button className="button primary full" onClick={() => go(0)}>
-                    <RotateCcw size={17} />
-                    {t('Повторить серии', 'Серияларды қайталау')}
-                  </button>
-                  <Link className="button secondary full" to="/library">
-                    {t('Самому выбрать другую тему', 'Басқа тақырып таңдау')}
-                    <ArrowRight size={17} />
-                  </Link>
-                  <Link className="text-button" to="/progress">
-                    {t('Посмотреть прогресс', 'Прогресті көру')}
-                  </Link>
-                </div>
+                        <Link className="text-button" to={`/learn/${current.season.id}`}>
+                          {t('Мой маршрут по теме', 'Тақырып бойынша жолым')}
+                          <ArrowRight size={16} />
+                        </Link>
+                      </div>
+                    )}
+                    {today && (
+                      <div className="tomorrow-topic">
+                        {t('Дальше по теме', 'Тақырып бойынша келесі қадам')}
+                        <strong>
+                          {today.next_episode
+                            ? t(
+                                `Серия ${today.next_episode.position + 1}: ${today.next_episode.title}`,
+                                `${today.next_episode.position + 1}-серия: ${today.next_episode.title}`,
+                              )
+                            : today.next_step === 'quiz'
+                              ? t('Итоговый тест', 'Қорытынды тест')
+                              : today.next_step === 'retelling'
+                                ? t('Объясни своими словами', 'Өз сөзіңмен түсіндір')
+                                : t('Тест и пересказ сохранены', 'Тест пен мазмұндау сақталды')}
+                        </strong>
+                        <small>
+                          {today.next_episode
+                            ? t(
+                                'Сегодняшний набор сохранён. Следующая короткая сессия — завтра. Продолжить тему сейчас можно по желанию.',
+                                'Бүгінгі сериялар сақталды. Келесі қысқа сессия — ертең. Қаласаң, тақырыпты қазір жалғастыр.',
+                              )
+                            : t(
+                                'Конец короткой сессии и результат теста — разные шаги. Результат пересказа оценивает учитель.',
+                                'Қысқа сессияның соңы мен тест нәтижесі — бөлек қадамдар. Мазмұндауды мұғалім бағалайды.',
+                              )}
+                          {!sessionDone && (
+                            <span>
+                              {t(
+                                ' Чтобы завершить маршрут серий, посмотри их и ответь верно на микровопросы.',
+                                ' Сериялар жолын аяқтау үшін оларды көріп, микросұрақтарға дұрыс жауап бер.',
+                              )}
+                            </span>
+                          )}
+                        </small>
+                      </div>
+                    )}
+                    <button className="button primary full" onClick={() => go(0)}>
+                      <RotateCcw size={17} />
+                      {t('Повторить серии', 'Серияларды қайталау')}
+                    </button>
+                    <Link className="button secondary full" to="/library">
+                      {t('Самому выбрать другую тему', 'Басқа тақырып таңдау')}
+                      <ArrowRight size={17} />
+                    </Link>
+                    <Link className="text-button" to="/progress">
+                      {t('Посмотреть прогресс', 'Прогресті көру')}
+                    </Link>
+                  </div>
+                )}
               </div>
               <p className="feed-key-hint">
                 {t('↑ ↓ — листать · пробел — пауза', '↑ ↓ — ауыстыру · бос орын — кідірту')}
@@ -956,8 +1118,45 @@ export function Feed() {
           </div>
         </Modal>
       )}
+      {breakOpen && (
+        <Modal title={t('Время для паузы', 'Үзіліс уақыты')} onClose={closeBreak}>
+          <p>
+            {t(
+              `Ты смотришь уже ${Math.round(watchedFor.current / 60)} мин. Можно отдохнуть или закрепить увиденное парой вопросов.`,
+              `Сен ${Math.round(watchedFor.current / 60)} минут көріп отырсың. Демалуға немесе көргеніңді бекітуге болады.`,
+            )}
+          </p>
+          <div className="feed-choice-list">
+            <button
+              onClick={() => {
+                closeBreak();
+                setModal('learn');
+              }}
+            >
+              <CircleHelp />
+              <span>
+                <b>{t('Проверить себя', 'Өзіңді тексер')}</b>
+                <small>{current?.season.title}</small>
+              </span>
+              <ArrowRight size={19} />
+            </button>
+            <Link to="/progress" onClick={closeBreak}>
+              <Moon />
+              <span>
+                <b>{t('На сегодня хватит', 'Бүгінге жетеді')}</b>
+                <small>{t('Посмотреть свой прогресс', 'Прогресіңді көру')}</small>
+              </span>
+              <ArrowRight size={19} />
+            </Link>
+          </div>
+          <button className="text-button full" onClick={closeBreak}>
+            {t('Смотреть дальше', 'Әрі қарай көру')}
+          </button>
+        </Modal>
+      )}
       {micro && (
         <MicroQuestion
+          route={!endless}
           episode={micro}
           onClose={() => setMicro(null)}
           onPassed={() => {
@@ -1074,6 +1273,7 @@ function FeedVideo({
   onEnded,
   onQuiz,
   onLike,
+  onFollow,
 }: {
   clip: Clip;
   context?: string;
@@ -1084,13 +1284,14 @@ function FeedVideo({
   onEnded: () => void;
   onQuiz: () => void;
   onLike: () => Promise<boolean>;
+  onFollow: () => void;
 }) {
   const { t, user } = useApp();
   // Demo topics belong to the platform; an author's lesson always carries the author's name.
-  const authorName =
-    clip.season.owner_role !== 'creator' && clip.season.source_name?.startsWith('Демонстрационные')
-      ? 'OylaTap'
-      : clip.season.owner_name || 'OylaTap';
+  const platform =
+    clip.season.owner_role !== 'creator' && clip.season.source_name?.startsWith('Демонстрационные');
+  const authorName = platform ? 'OylaTap' : clip.season.owner_name || 'OylaTap';
+  const authorPage = !platform && clip.season.owner_id ? `/author/${clip.season.owner_id}` : null;
   const ref = useRef<HTMLVideoElement>(null);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [burst, setBurst] = useState(0);
@@ -1253,10 +1454,30 @@ function FeedVideo({
           </p>
         )}
         <div className="creator">
-          <span className="creator-avatar">{authorName.slice(0, 1)}</span>
-          <span>
-            {authorName} {clip.season.owner_trust === 'trusted' && <CheckCheck size={16} />}
-          </span>
+          {authorPage ? (
+            <Link className="creator-link" to={authorPage}>
+              <span className="creator-avatar">{authorName.slice(0, 1)}</span>
+              <span>
+                {authorName} {clip.season.owner_trust === 'trusted' && <CheckCheck size={16} />}
+              </span>
+            </Link>
+          ) : (
+            <>
+              <span className="creator-avatar">{authorName.slice(0, 1)}</span>
+              <span>{authorName}</span>
+            </>
+          )}
+          {authorPage && clip.season.owner_id !== user?.id && (
+            <button
+              className={`follow-button ${clip.season.owner_followed ? 'following' : ''}`}
+              aria-pressed={Boolean(clip.season.owner_followed)}
+              onClick={onFollow}
+            >
+              {clip.season.owner_followed
+                ? t('Вы подписаны', 'Жазылдыңыз')
+                : t('Подписаться', 'Жазылу')}
+            </button>
+          )}
           <span className="video-language">
             {clip.season.language === 'kk' ? 'Қазақша' : 'Русский'}
           </span>
