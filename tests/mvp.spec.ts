@@ -530,11 +530,16 @@ test('quiet feed keeps focus and appearance preferences, and supports pause and 
   await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   const seek = page.locator('.feed-slide').first().getByRole('slider', { name: 'Позиция видео' });
   await seek.press('Home');
+  await expect.poll(async () => Number(await seek.inputValue())).toBe(0);
   await seek.press('ArrowRight');
+  const firstStep = Number(await seek.inputValue());
+  expect(firstStep).toBeGreaterThan(0);
   await seek.press('ArrowRight');
+  const secondStep = Number(await seek.inputValue());
+  expect(secondStep).toBeGreaterThan(firstStep);
   await expect
     .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
-    .toBeCloseTo(0.2, 1);
+    .toBeCloseTo(secondStep, 1);
   await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await page.locator('.feed-scroll').focus();
   await page.keyboard.press('Space');
