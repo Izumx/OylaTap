@@ -875,7 +875,7 @@ export function Feed() {
                         </small>
                       </div>
                     )}
-                    <button className="button primary full" onClick={() => go(0)}>
+                    <button className="button secondary full" onClick={() => go(0)}>
                       <RotateCcw size={17} />
                       {t('Повторить серии', 'Серияларды қайталау')}
                     </button>

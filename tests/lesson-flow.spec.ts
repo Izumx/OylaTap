@@ -181,7 +181,7 @@ for (const [step, feedback, action] of [
         },
       }),
     );
-    await page.goto('/');
+    await page.goto('/?feed=today');
     const micro = await finishVideo(page);
     await micro.getByRole('button', { name: 'A В Жетысу', exact: true }).click();
     checked = true;
