@@ -21,7 +21,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev',
+    command: 'node --import tsx server/index.ts',
+    env: { PORT: '3100' },
     url: 'http://127.0.0.1:3100/api/health',
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
