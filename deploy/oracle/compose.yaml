@@ -1,0 +1,127 @@
+name: oylatap
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set the OylaTap DOMAIN}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - type: bind
+        source: /opt/oylatap/app/deploy/oracle/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  web:
+    image: oylatap:oracle-local
+    build:
+      context: ../..
+      dockerfile: deploy/oracle/Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 90s
+    user: '1000:1000'
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=768
+      PORT: '3100'
+      DATABASE_URL: postgresql://oylatap:${POSTGRES_PASSWORD:?Set a random URL-safe POSTGRES_PASSWORD}@oylatap-db:5432/oylatap
+      DATA_DIR: /app/data
+      PG_BIN: /usr/lib/postgresql/16/bin
+      DEMO_MODE: 'false'
+      COOKIE_SECURE: 'true'
+      TRUST_PROXY_HOPS: '1'
+      APP_URL: https://${DOMAIN:?Set the new OylaTap DOMAIN}
+      PASSWORD_RECOVERY_ENABLED: 'false'
+    volumes:
+      - type: bind
+        source: /opt/oylatap/data
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/oylatap/backups
+        target: /app/backups
+        bind:
+          create_host_path: false
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - '3100'
+    networks:
+      internal:
+      edge:
+        aliases:
+          - oylatap-web
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2560m
+    cpus: '1.0'
+    pids_limit: 512
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_DB: oylatap
+      POSTGRES_USER: oylatap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a random URL-safe POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks:
+      internal:
+        aliases:
+          - oylatap-db
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+    shm_size: 128m
+    mem_limit: 768m
+    cpus: '1.0'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+networks:
+  internal:
+    internal: true
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:?Set the existing Caddy Docker network name}
+
+volumes:
+  database:
+    name: oylatap_postgres16_data
+  caddy_data:
+    external: true
+    name: oylatap_caddy_data
+  caddy_config:
+    external: true
+    name: oylatap_caddy_config

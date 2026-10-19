@@ -1,0 +1,9 @@
+[Unit]
+Description=Verified OylaTap database and media backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/oylatap/app/deploy/oracle/backup.sh
+TimeoutStartSec=20min

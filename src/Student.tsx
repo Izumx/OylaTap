@@ -73,12 +73,16 @@ function MicroQuestion({
   onClose,
   onPassed,
   onNext,
+  onReplay,
+  nextLabel,
   route = true,
 }: {
   episode: Episode;
   onClose: () => void;
   onPassed: () => void;
   onNext: () => void;
+  onReplay: () => void;
+  nextLabel: string;
   route?: boolean;
 }) {
   const r = useResource<any>(`/episodes/${episode.id}/micro`);
@@ -100,6 +104,8 @@ function MicroQuestion({
                   <button
                     key={i}
                     className={answer === i ? 'selected' : ''}
+                    aria-pressed={answer === i}
+                    disabled={busy}
                     onClick={() => setAnswer(i)}
                   >
                     <span>{String.fromCharCode(65 + i)}</span>
@@ -108,13 +114,21 @@ function MicroQuestion({
                 ))}
               </div>
             ) : (
-              <div className={`micro-result ${result.passed ? 'passed' : 'wrong'}`}>
+              <div className={`micro-result ${result.passed ? 'passed' : 'wrong'}`} role="status">
                 <b>
                   {result.passed
                     ? t('Ответ верный!', 'Дұрыс жауап!')
                     : t('Разберём вместе', 'Бірге түсінейік')}
                 </b>
                 <p>{result.explanation}</p>
+                <p className="micro-next">
+                  {result.passed
+                    ? nextLabel
+                    : t(
+                        'Вернись к объяснению и проверь себя ещё раз.',
+                        'Түсіндірмені қайта көріп, өзіңді тағы тексер.',
+                      )}
+                </p>
                 {!user && (
                   <small>
                     {t(
@@ -133,6 +147,7 @@ function MicroQuestion({
                   disabled={answer === null || busy}
                   onClick={async () => {
                     setBusy(true);
+                    setError('');
                     try {
                       const v = await post(`/episodes/${episode.id}/check`, { answer });
                       setResult(v);
@@ -144,7 +159,7 @@ function MicroQuestion({
                     }
                   }}
                 >
-                  {t('Проверить', 'Тексеру')}
+                  {busy ? t('Проверяем…', 'Тексерілуде…') : t('Проверить', 'Тексеру')}
                   <ArrowRight size={17} />
                 </button>
                 {/* The question is part of the feed, not a gate: it can be skipped. */}
@@ -154,21 +169,33 @@ function MicroQuestion({
               </>
             ) : (
               <>
-                <button className="button primary full" onClick={onNext}>
-                  {route
-                    ? t('Дальше по маршруту', 'Маршрутты жалғастыру')
-                    : t('Дальше', 'Әрі қарай')}
-                  <ArrowRight size={17} />
-                </button>
+                {result.passed ? (
+                  <button className="button primary full" onClick={onNext}>
+                    {route
+                      ? t('Дальше по маршруту', 'Маршрутты жалғастыру')
+                      : t('Дальше', 'Әрі қарай')}
+                    <ArrowRight size={17} />
+                  </button>
+                ) : (
+                  <button className="button primary full" onClick={onReplay}>
+                    <RotateCcw size={17} /> {t('Повторить объяснение', 'Түсіндірмені қайталау')}
+                  </button>
+                )}
                 {!result.passed && (
                   <button
                     className="text-button full"
                     onClick={() => {
                       setResult(null);
                       setAnswer(null);
+                      setError('');
                     }}
                   >
                     {t('Попробовать ещё раз', 'Қайта байқап көру')}
+                  </button>
+                )}
+                {!result.passed && (
+                  <button className="text-button full" onClick={onNext}>
+                    {t('Дальше по маршруту', 'Маршрутты жалғастыру')} <ArrowRight size={16} />
                   </button>
                 )}
               </>
@@ -1157,7 +1184,40 @@ export function Feed() {
       {micro && (
         <MicroQuestion
           route={!endless}
+          key={micro.id}
           episode={micro}
+          nextLabel={
+            clips[active + 1]
+              ? t(
+                  `Дальше — ${clips[active + 1].episode.title}`,
+                  `Келесі — ${clips[active + 1].episode.title}`,
+                )
+              : today && !sessionDone
+                ? t(
+                    'Дальше — итог сессии и что осталось повторить',
+                    'Келесі — сессия қорытындысы және қайталау керек тұстар',
+                  )
+                : today?.next_step === 'continue'
+                  ? t(
+                      'Дальше — итог сессии и продолжение темы',
+                      'Келесі — сессия қорытындысы және тақырыпты жалғастыру',
+                    )
+                  : today?.next_step === 'retelling'
+                    ? t('Дальше — пересказ по желанию', 'Келесі — қалауыңша мазмұндау')
+                    : today?.next_step === 'complete'
+                      ? t('Дальше — твой прогресс', 'Келесі — сенің прогресің')
+                      : t('Дальше — итоговый тест', 'Келесі — қорытынды тест')
+          }
+          onReplay={() => {
+            const index =
+              clips[active]?.episode.id === micro.id
+                ? active
+                : clips.findIndex((clip) => clip.episode.id === micro.id);
+            const video = scroll.current?.querySelectorAll('video').item(index);
+            if (video) video.currentTime = 0;
+            setMicro(null);
+            if (index >= 0) go(index);
+          }}
           onClose={() => setMicro(null)}
           onPassed={() => {
             setPassed((old) => new Set([...old, micro.id]));

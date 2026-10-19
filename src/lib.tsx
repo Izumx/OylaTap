@@ -78,6 +78,7 @@ export type Season = {
   art: string;
   status: string;
   episode_count: number;
+  cover_episode_id?: string | null;
   duration: number;
   completed: number;
   best_score: number | null;

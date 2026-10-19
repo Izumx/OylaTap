@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Plus,
@@ -943,8 +943,8 @@ export function EditorPage() {
                   <b>{t('Собираем серии в фоне', 'Сериялар фонда жиналуда')}</b>
                   <p>
                     {t(
-                      'Можно вернуться в студию. Правки сохранены.',
-                      'Студияға оралуға болады. Өзгерістер сақталды.',
+                      'Задание сохранено в очереди. Можно закрыть страницу: после перезапуска сервера сборка продолжится.',
+                      'Тапсырма кезекте сақталды. Бетті жабуға болады: сервер қайта қосылғаннан кейін жинау жалғасады.',
                     )}
                   </p>
                 </div>
@@ -1293,6 +1293,61 @@ function AssignModal({ seasonId, onClose }: { seasonId: string; onClose: () => v
 function SendIcon() {
   return <ArrowRight size={17} />;
 }
+function ClassInvitation({ code }: { code: string }) {
+  const { t, notify } = useApp();
+  const input = useRef<HTMLInputElement>(null);
+  const url = new URL(`/join/${encodeURIComponent(code)}`, window.location.origin).href;
+  const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(window.location.hostname);
+  return (
+    <div className="class-invite-link">
+      <label htmlFor={`invite-link-${code}`}>
+        {t('Ссылка для учеников', 'Оқушыларға арналған сілтеме')}
+      </label>
+      <input
+        id={`invite-link-${code}`}
+        ref={input}
+        value={url}
+        readOnly
+        onClick={(event) => event.currentTarget.select()}
+      />
+      <button
+        className="button secondary full"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(url);
+            notify(t('Ссылка скопирована', 'Сілтеме көшірілді'));
+          } catch {
+            input.current?.focus();
+            input.current?.select();
+            notify(
+              t(
+                'Ссылка выделена. Скопируйте её вручную.',
+                'Сілтеме белгіленді. Оны қолмен көшіріңіз.',
+              ),
+            );
+          }
+        }}
+      >
+        <Copy size={17} />
+        {t('Скопировать ссылку-приглашение', 'Шақыру сілтемесін көшіру')}
+      </button>
+      <p className="small muted">
+        {t(
+          'Отправьте ссылку ученикам. Они войдут в аккаунт, подтвердят класс и откроют тему.',
+          'Сілтемені оқушыларға жіберіңіз. Олар аккаунтқа кіріп, сыныпты растап, тақырыпты ашады.',
+        )}
+      </p>
+      {local && (
+        <p className="small muted">
+          {t(
+            'Это локальный адрес этого компьютера. Для учеников на других устройствах откройте сайт по общему адресу и скопируйте ссылку оттуда.',
+            'Бұл — осы компьютердің жергілікті мекенжайы. Басқа құрылғылардағы оқушылар үшін сайтты ортақ мекенжайдан ашып, сілтемені сол жерден көшіріңіз.',
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
 export function ClassesPage() {
   const catalog = useResource<Season[]>('/catalog');
   const r = useResource<any[]>('/classes'),
@@ -1307,8 +1362,8 @@ export function ClassesPage() {
         eyebrow={t('УЧИМСЯ ВМЕСТЕ', 'БІРГЕ ҮЙРЕНЕМІЗ')}
         title={t('Ваши классы', 'Сыныптарыңыз')}
         description={t(
-          'Ученикам нужен только код приглашения и свой аккаунт.',
-          'Оқушыларға шақыру коды және жеке аккаунты қажет.',
+          'Пригласите учеников по ссылке или коду класса.',
+          'Оқушыларды сілтеме немесе сынып коды арқылы шақырыңыз.',
         )}
         action={
           <button className="button primary" onClick={() => setShow(true)}>
@@ -1382,10 +1437,11 @@ export function ClassesPage() {
                     <Copy size={20} />
                   </button>
                 </div>
+                <ClassInvitation code={c.code} />
                 <p className="small muted">
                   {t(
-                    'Попросите учеников открыть «Задания» и ввести этот код.',
-                    'Оқушылар «Тапсырмалар» бетінде осы кодты енгізсін.',
+                    'Если удобнее ввести код: откройте «Задания» в аккаунте ученика.',
+                    'Кодты енгізу ыңғайлы болса, оқушы аккаунтында «Тапсырмалар» бетін ашыңыз.',
                   )}
                 </p>
                 <Link className="button secondary full" to={`/results?class_id=${c.id}`}>

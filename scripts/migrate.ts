@@ -18,6 +18,8 @@ try {
     '008_creator_platform',
     '009_curriculum_topics',
     '010_author_follows',
+    '010_password_reset',
+    '011_render_jobs',
   ]) {
     if (
       !(await client.query('SELECT name FROM schema_migrations WHERE name=$1', [name])).rowCount

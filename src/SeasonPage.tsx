@@ -11,7 +11,7 @@ import {
   Play,
 } from 'lucide-react';
 import { useApp, useResource, subjects, minutes, testQuestions, type Season } from './lib';
-import { SeasonArt, State } from './components';
+import { SeasonCover, State } from './components';
 import { Quiz, Recorder } from './Student';
 
 export function SeasonPage() {
@@ -37,6 +37,7 @@ export function SeasonPage() {
   const latest = season?.attempts?.[0];
   const retelling = season?.retellings?.[0];
   const hasQuiz = Boolean(season && testQuestions(season).length);
+  const needsReview = Boolean(latest && latest.score < latest.total);
   const open = (step: 'quiz' | 'record') => {
     if (!user) login();
     else setModal(step);
@@ -79,26 +80,59 @@ export function SeasonPage() {
                     <ListChecks size={15} /> {testQuestions(season).length} {t('вопроса', 'сұрақ')}
                   </span>
                 </div>
-                {!allWatched && resume >= 0 ? (
-                  <Link className="button primary" to={`/watch/${id}?episode=${resume}`}>
-                    <Play size={18} />{' '}
-                    {watched
-                      ? t('Продолжить просмотр', 'Көруді жалғастыру')
-                      : t('Начать с первой серии', 'Бірінші сериядан бастау')}
-                  </Link>
-                ) : !latest && hasQuiz ? (
-                  <button className="button primary" onClick={() => open('quiz')}>
-                    <ListChecks size={18} /> {t('Проверить себя', 'Өзіңді тексеру')}
-                  </button>
-                ) : !retelling && latest ? (
-                  <button className="button primary" onClick={() => open('record')}>
-                    <Mic size={18} /> {t('Рассказать своими словами', 'Өз сөзіңмен айту')}
-                  </button>
-                ) : (
-                  <Link className="button primary" to={user ? '/progress' : '/library'}>
-                    {t('Посмотреть прогресс', 'Прогресті көру')} <ArrowRight size={18} />
-                  </Link>
-                )}
+                <div className="topic-next-step">
+                  <strong>{t('Следующий шаг', 'Келесі қадам')}</strong>
+                  <p>
+                    {!allWatched && resume >= 0
+                      ? t(
+                          'Посмотри объяснение. После серии — один короткий вопрос.',
+                          'Түсіндірмені көр. Әр сериядан кейін бір қысқа сұрақ бар.',
+                        )
+                      : !latest && hasQuiz
+                        ? t(
+                            'Серии просмотрены. Проверь, что удалось понять.',
+                            'Сериялар көрілді. Не түсінгеніңді тексер.',
+                          )
+                        : needsReview
+                          ? t(
+                              'В тесте остались ошибки. Разбери их и вернись к нужной серии.',
+                              'Тестте қателер бар. Оларды талдап, қажетті серияны қайта көр.',
+                            )
+                          : !retelling && latest
+                            ? t(
+                                'Тест пройден без ошибок. По желанию объясни тему своими словами.',
+                                'Тест қатесіз өтті. Қаласаң, тақырыпты өз сөзіңмен түсіндір.',
+                              )
+                            : t(
+                                'Выбери, что повторить, или открой другую тему.',
+                                'Қайталау үшін серияны таңда немесе басқа тақырыпты аш.',
+                              )}
+                  </p>
+                  {!allWatched && resume >= 0 ? (
+                    <Link className="button primary" to={`/watch/${id}?episode=${resume}`}>
+                      <Play size={18} />{' '}
+                      {watched
+                        ? t('Продолжить просмотр', 'Көруді жалғастыру')
+                        : t('Начать с первой серии', 'Бірінші сериядан бастау')}
+                    </Link>
+                  ) : !latest && hasQuiz ? (
+                    <button className="button primary" onClick={() => open('quiz')}>
+                      <ListChecks size={18} /> {t('Проверить себя', 'Өзіңді тексеру')}
+                    </button>
+                  ) : needsReview ? (
+                    <Link className="button primary" to={`/attempts/${latest.id}`}>
+                      <ListChecks size={18} /> {t('Разобрать ошибки', 'Қателерді талдау')}
+                    </Link>
+                  ) : !retelling && latest ? (
+                    <button className="button primary" onClick={() => open('record')}>
+                      <Mic size={18} /> {t('Рассказать своими словами', 'Өз сөзіңмен айту')}
+                    </button>
+                  ) : (
+                    <Link className="button primary" to={user ? '/progress' : '/library'}>
+                      {t('Посмотреть прогресс', 'Прогресті көру')} <ArrowRight size={18} />
+                    </Link>
+                  )}
+                </div>
                 {!user && (
                   <small className="topic-save-note">
                     {t(
@@ -109,7 +143,7 @@ export function SeasonPage() {
                 )}
               </div>
               <div className="topic-cover">
-                <SeasonArt art={season.art} color={season.color} />
+                <SeasonCover season={season} />
               </div>
             </header>
 

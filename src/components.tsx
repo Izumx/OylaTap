@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -457,12 +457,28 @@ export function SeasonArt({
     </svg>
   );
 }
+export function SeasonCover({ season }: { season: Season }) {
+  const episodeId = season.cover_episode_id ?? season.episodes?.find((ep) => ep.has_video)?.id;
+  const [failedId, setFailedId] = useState<string | null>(null);
+  if (!episodeId || failedId === episodeId)
+    return <SeasonArt art={season.art} color={season.color} />;
+  return (
+    <img
+      className="season-art video-cover"
+      src={`/api/episodes/${episodeId}/poster`}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailedId(episodeId)}
+    />
+  );
+}
 export function SeasonCard({ season, studio = false }: { season: Season; studio?: boolean }) {
   const { t, locale } = useApp();
   return (
     <Link className="season-card" to={studio ? `/studio/${season.id}` : `/learn/${season.id}`}>
       <div className="card-art">
-        <SeasonArt art={season.art} color={season.color} />
+        <SeasonCover season={season} />
         <span className="card-language">{season.language === 'kk' ? 'ҚАЗ' : 'РУС'}</span>
         <span className="card-play">
           <Play size={21} fill="currentColor" />

@@ -3,6 +3,7 @@ import { access, readFile } from 'node:fs/promises';
 import { db, one, rows } from '../server/db.js';
 import { hashPassword } from '../server/auth.js';
 import { renderEpisode } from '../server/render.js';
+import khanateLesson from '../content/khanate-flow/lesson.json';
 if (process.env.DEMO_MODE !== 'true')
   throw new Error('Demo seeding requires DEMO_MODE=true. Do not seed a live school database.');
 const teacherId = '00000000-0000-4000-8000-000000000001',
@@ -454,6 +455,64 @@ for (const s of authored) {
     }
   }
 }
+// The finished Flow lesson includes narration and subtitles; keep its original MP4.
+const khanateId = 'f9285ed2-b8cf-419e-83e8-c6844a65f74a';
+const khanateVideo = 'content/khanate-flow/oylatap-khanate-full-ru.mp4';
+await access(khanateVideo);
+if (!(await one('SELECT id FROM seasons WHERE id=$1', [khanateId]))) {
+  const c = await db.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query(
+      `INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,color,art,status,
+        source_name,source_text,visibility,topic_id,published_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,'sage','history','published',$8,$9,'public',
+        '40000000-0000-4000-8000-000000000502',now())`,
+      [
+        khanateId,
+        teacherId,
+        khanateLesson.title,
+        khanateLesson.description,
+        khanateLesson.subject,
+        khanateLesson.language,
+        khanateLesson.grade,
+        khanateLesson.source_name,
+        khanateLesson.source_text,
+      ],
+    );
+    const episodeIds: string[] = [];
+    for (const [position, episode] of khanateLesson.episodes.entries()) {
+      episodeIds.push(randomUUID());
+      await c.query(
+        `INSERT INTO episodes(id,season_id,position,title,script,duration,media_path,media_kind)
+         VALUES($1,$2,$3,$4,$5,48,$6,'uploaded')`,
+        [episodeIds[position], khanateId, position, episode.title, episode.script, khanateVideo],
+      );
+    }
+    for (const [position, question] of khanateLesson.questions.entries())
+      await c.query(
+        `INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id,purpose)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          randomUUID(),
+          khanateId,
+          position,
+          question.prompt,
+          JSON.stringify(question.options),
+          question.correct,
+          question.explanation,
+          episodeIds[question.episode_position],
+          question.purpose,
+        ],
+      );
+    await c.query('COMMIT');
+  } catch (error) {
+    await c.query('ROLLBACK');
+    throw error;
+  } finally {
+    c.release();
+  }
+}
 const classId = '20000000-0000-4000-8000-000000000001';
 await db.query(
   "INSERT INTO classrooms(id,teacher_id,name,code,current_season_id) VALUES($1,$2,'7 А · История и литература','OYLA7A',$3) ON CONFLICT(id) DO NOTHING",
@@ -468,6 +527,6 @@ await db.query(
   [randomUUID(), classId, seasons[0].id],
 );
 console.log(
-  'Demo users (student, teacher-moderator, author), 6 seasons with playable videos, classroom and assignment ready.',
+  'Demo users (student, teacher-moderator, author), 7 seasons with playable videos (including Google Flow), classroom and assignment ready.',
 );
 await db.end();

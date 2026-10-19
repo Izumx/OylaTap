@@ -1,4 +1,5 @@
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, rename } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -16,6 +17,7 @@ type Episode = {
   voice_path?: string | null;
 };
 type Options = {
+  signal?: AbortSignal;
   color?: string;
   style?: VideoStyle;
   voice?: Voice;
@@ -173,11 +175,11 @@ function captionsFrame(ep: Episode, steps: string[], at: number, bg: string, aut
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="#11151c"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/><circle cx="640" cy="260" r="260" fill="white" opacity=".05"/>${bars}<g font-family="${SANS}"><text x="56" y="${TOP_SAFE + 60}" font-size="28" fill="#ffffff" opacity=".85">${xml(wrap(ep.title, 40)[0])}</text>${signature(author, TOP_SAFE + 96, '#ffffff')}${lines.map((line, i) => `<text x="${centre}" y="${y0 + i * lh}" font-size="${size}" font-weight="bold" fill="${isFormula(steps[at]) ? '#ffd27a' : '#ffffff'}" text-anchor="middle"${isFormula(steps[at]) ? ` font-family="${MONO}"` : ''}>${xml(line)}</text>`).join('')}</g></svg>`;
 }
 
-async function probeDuration(path: string) {
+async function probeDuration(path: string, signal?: AbortSignal) {
   const p = await exec(
     'ffprobe',
     ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', path],
-    { timeout: 15000 },
+    { timeout: 15000, signal, windowsHide: true },
   );
   const duration = Number(JSON.parse(p.stdout).format?.duration);
   if (!Number.isFinite(duration) || duration <= 0) throw new Error('Не удалось прочитать звук');
@@ -199,7 +201,7 @@ function ttsCommand(language: string): string[] | null {
   }
 }
 export const ttsAvailable = (language: string) => Boolean(ttsCommand(language));
-async function synthesize(language: string, text: string, out: string) {
+async function synthesize(language: string, text: string, out: string, signal?: AbortSignal) {
   const command = ttsCommand(language);
   if (!command) throw new Error('Озвучка для этого языка не настроена на сервере');
   const [program, ...args] = command;
@@ -207,7 +209,7 @@ async function synthesize(language: string, text: string, out: string) {
     const child = spawn(
       program,
       args.map((a) => a.replace('{out}', out)),
-      { stdio: ['pipe', 'ignore', 'pipe'] },
+      { stdio: ['pipe', 'ignore', 'pipe'], signal, windowsHide: true },
     );
     let errors = '';
     const timer = setTimeout(() => child.kill(), 120000);
@@ -224,11 +226,11 @@ async function synthesize(language: string, text: string, out: string) {
 
 export async function renderEpisode(episode: Episode, options: Options | string = {}) {
   const o: Options = typeof options === 'string' ? { color: options } : options;
+  o.signal?.throwIfAborted();
   const style = o.style || 'cards',
     bg = palette[o.color || 'sage'] || palette.sage;
   await mkdir(dataDir, { recursive: true });
-  const work = resolve(dataDir, `render-${episode.id}`);
-  await rm(work, { recursive: true, force: true });
+  const work = resolve(dataDir, `render-${episode.id}-${randomUUID()}`);
   await mkdir(work, { recursive: true });
   try {
     const steps = style === 'cards' ? [episode.script] : splitSteps(episode.script);
@@ -241,6 +243,7 @@ export async function renderEpisode(episode: Episode, options: Options | string 
         o.language || 'ru',
         `${episode.title}. ${steps.map(plain).join(' ')}`,
         audio,
+        o.signal,
       );
     }
     // Synthesised narration starts with the title, which stays on the first frame.
@@ -249,7 +252,7 @@ export async function renderEpisode(episode: Episode, options: Options | string 
     const reading = steps.map((s) => Math.max(isFormula(s) ? 3 : 2.2, words(s) / 2.4));
     let durations = reading;
     if (audio) {
-      const total = await probeDuration(audio);
+      const total = await probeDuration(audio, o.signal);
       if (total > 180) throw new Error('Озвучка серии должна быть не длиннее 3 минут');
       const weights = steps.map(words);
       const sum = weights.reduce((a, b) => a + b, 0);
@@ -283,6 +286,7 @@ export async function renderEpisode(episode: Episode, options: Options | string 
         ? ['-loop', '1', '-i', pngs[0]]
         : ['-f', 'concat', '-safe', '0', '-i', listPath];
     const mp4 = resolve(dataDir, `${episode.id}.mp4`);
+    const output = resolve(work, 'video.mp4');
     const total = durations.reduce((a, b) => a + b, 0);
     await exec(
       'ffmpeg',
@@ -310,10 +314,13 @@ export async function renderEpisode(episode: Episode, options: Options | string 
         total.toFixed(2),
         '-movflags',
         '+faststart',
-        mp4,
+        output,
       ],
-      { timeout: 180000 },
+      { timeout: 180000, signal: o.signal, windowsHide: true },
     );
+    o.signal?.throwIfAborted();
+    await rename(output, mp4);
+    o.signal?.throwIfAborted();
     await db.query(
       "UPDATE episodes SET media_path=$1,duration=$2,media_kind='rendered' WHERE id=$3",
       [mp4, Math.max(1, Math.round(total)), episode.id],
@@ -322,8 +329,9 @@ export async function renderEpisode(episode: Episode, options: Options | string 
     await rm(work, { recursive: true, force: true });
   }
 }
-export async function renderSeason(id: string) {
+export async function renderSeason(id: string, signal?: AbortSignal): Promise<boolean> {
   try {
+    signal?.throwIfAborted();
     const season = await one(
       'SELECT s.*,u.name owner_name FROM seasons s JOIN users u ON u.id=s.owner_id WHERE s.id=$1',
       [id],
@@ -336,6 +344,7 @@ export async function renderSeason(id: string) {
       if (season.voice === 'own' && !ep.voice_path)
         throw new Error(`Запишите голос для серии ${ep.position + 1}`);
       await renderEpisode(ep, {
+        signal,
         color: season.color,
         style: season.style,
         voice: season.voice,
@@ -343,11 +352,14 @@ export async function renderSeason(id: string) {
         author: season.owner_name,
       });
     }
+    signal?.throwIfAborted();
     await db.query(
       "UPDATE seasons SET status='review',render_error=NULL,updated_at=now() WHERE id=$1",
       [id],
     );
+    return true;
   } catch (error) {
+    if (signal?.aborted) throw error;
     const message = error instanceof Error ? error.message : 'unknown';
     console.error('Video rendering failed:', message);
     await db.query(
@@ -359,5 +371,6 @@ export async function renderSeason(id: string) {
           : 'Не удалось собрать видео. Сценарий сохранён — можно повторить сборку.',
       ],
     );
+    return false;
   }
 }

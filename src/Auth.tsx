@@ -1,23 +1,26 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowRight, GraduationCap, BookOpen, LoaderCircle, Clapperboard } from 'lucide-react';
 import { Modal } from './components';
 import { post, useApp } from './lib';
 export default function Auth() {
-  const { authOpen, closeAuth, refresh, demo, t } = useApp();
+  const { authOpen, closeAuth, refresh, demo, t, locale, setLocale } = useApp();
+  const invitation = useLocation().pathname.startsWith('/join/');
   const nav = useNavigate();
   const [register, setRegister] = useState(false),
     [role, setRole] = useState<'student' | 'teacher' | 'creator'>('student'),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  const effectiveRole = invitation ? 'student' : role;
   async function run(data: unknown, path: string) {
     setError('');
     setBusy(true);
     try {
       const r = await post(path, data);
       await refresh();
+      if (register) setLocale(r.user.language);
       closeAuth();
-      if (r.user.role !== 'student') nav('/studio');
+      if (r.user.role !== 'student' && !invitation) nav('/studio');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -39,21 +42,31 @@ export default function Auth() {
           'Мектеп тақырыптарын түсіндіре алатындардан қысқа түсіндірмелер.',
         )}
       </p>
-      <div className="segmented">
-        <button className={role === 'student' ? 'active' : ''} onClick={() => setRole('student')}>
-          <GraduationCap size={18} />
-          {t('Я ученик', 'Оқушымын')}
-        </button>
-        <button className={role === 'creator' ? 'active' : ''} onClick={() => setRole('creator')}>
-          <Clapperboard size={18} />
-          {t('Я автор', 'Автормын')}
-        </button>
-        <button className={role === 'teacher' ? 'active' : ''} onClick={() => setRole('teacher')}>
-          <BookOpen size={18} />
-          {t('Я учитель', 'Мұғаліммін')}
-        </button>
-      </div>
-      {role === 'creator' && (
+      {invitation && (
+        <p className="auth-invitation-note">
+          {t(
+            'Вход ученика. После входа ты вернёшься к приглашению в класс.',
+            'Оқушы ретінде кіру. Кіргеннен кейін сынып шақыруына ораласың.',
+          )}
+        </p>
+      )}
+      {!invitation && (
+        <div className="segmented">
+          <button className={role === 'student' ? 'active' : ''} onClick={() => setRole('student')}>
+            <GraduationCap size={18} />
+            {t('Я ученик', 'Оқушымын')}
+          </button>
+          <button className={role === 'creator' ? 'active' : ''} onClick={() => setRole('creator')}>
+            <Clapperboard size={18} />
+            {t('Я автор', 'Автормын')}
+          </button>
+          <button className={role === 'teacher' ? 'active' : ''} onClick={() => setRole('teacher')}>
+            <BookOpen size={18} />
+            {t('Я учитель', 'Мұғаліммін')}
+          </button>
+        </div>
+      )}
+      {effectiveRole === 'creator' && (
         <p className="muted small">
           {t(
             'Знаете тему и умеете объяснять? Расскажите голосом или напишите текст — OylaTap соберёт видео без монтажа и покажет его тем, кто проходит эту тему сейчас. Публикуют взрослые авторы; первые видео проверяет модератор.',
@@ -79,7 +92,12 @@ export default function Auth() {
               email: f.get('email'),
               password: f.get('password'),
               ...(register
-                ? { name: f.get('name'), grade: Number(f.get('grade') || 7), role }
+                ? {
+                    name: f.get('name'),
+                    grade: Number(f.get('grade') || 7),
+                    role: effectiveRole,
+                    language: f.get('language'),
+                  }
                 : {}),
             },
             register ? '/auth/register' : '/auth/login',
@@ -99,7 +117,7 @@ export default function Auth() {
                 placeholder="Али"
               />
             </label>
-            {role === 'student' && (
+            {effectiveRole === 'student' && (
               <label>
                 {t('Класс', 'Сынып')}
                 <select name="grade" defaultValue="7">
@@ -109,6 +127,17 @@ export default function Auth() {
                 </select>
               </label>
             )}
+            <label>
+              {t('Язык обучения', 'Оқу тілі')}
+              <select
+                name="language"
+                aria-label={t('Язык обучения', 'Оқу тілі')}
+                defaultValue={locale}
+              >
+                <option value="ru">Русский</option>
+                <option value="kk">Қазақша</option>
+              </select>
+            </label>
           </>
         )}
         <label>
@@ -149,6 +178,17 @@ export default function Auth() {
           )}
         </button>
       </form>
+      {!register && (
+        <button
+          className="text-button auth-switch"
+          onClick={() => {
+            closeAuth();
+            nav('/forgot-password');
+          }}
+        >
+          {t('Забыли пароль?', 'Құпиясөзді ұмыттыңыз ба?')}
+        </button>
+      )}
       <button
         className="text-button auth-switch"
         onClick={() => {
@@ -161,7 +201,7 @@ export default function Auth() {
           register ? 'Аккаунт бар ма? Кіру' : 'Аккаунт жасау',
         )}
       </button>
-      {demo && (
+      {demo && !invitation && (
         <div className="demo-box">
           <span>{t('Сначала познакомимся?', 'Алдымен танысайық па?')}</span>
           <p>

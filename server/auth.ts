@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
+import type pg from 'pg';
 import { one, db } from './db.js';
 export type User = {
   id: string;
@@ -37,12 +38,7 @@ export function cookieToken(req: Request) {
     ?.slice(16);
 }
 export const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
-export async function createSession(res: Response, userId: string) {
-  const token = randomBytes(32).toString('hex');
-  await db.query(
-    "INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '7 days')",
-    [tokenHash(token), userId],
-  );
+export function setSessionCookie(res: Response, token: string) {
   res.cookie('oylatap_session', token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -50,6 +46,41 @@ export async function createSession(res: Response, userId: string) {
     maxAge: 7 * 86400000,
     path: '/',
   });
+}
+// Password resets take the same account lock before replacing credentials and revoking sessions.
+// Verify the password and insert the session while holding that lock, then expose the token only
+// after commit so a login using superseded credentials cannot survive a concurrent reset.
+export async function authenticateWithPassword(pool: pg.Pool, email: string, password: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const user = (await client.query('SELECT * FROM users WHERE email=$1 FOR UPDATE', [email]))
+      .rows[0];
+    if (!user || !verifyPassword(password, user.password_hash)) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const token = randomBytes(32).toString('hex');
+    await client.query(
+      "INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '7 days')",
+      [tokenHash(token), user.id],
+    );
+    await client.query('COMMIT');
+    return { user, token };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+export async function createSession(res: Response, userId: string) {
+  const token = randomBytes(32).toString('hex');
+  await db.query(
+    "INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '7 days')",
+    [tokenHash(token), userId],
+  );
+  setSessionCookie(res, token);
 }
 export async function auth(req: Request, res: Response, next: NextFunction) {
   const token = cookieToken(req);

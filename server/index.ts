@@ -15,7 +15,8 @@ import {
   teacher,
   author,
   hashPassword,
-  verifyPassword,
+  authenticateWithPassword,
+  setSessionCookie,
   createSession,
   cookieToken,
   tokenHash,
@@ -29,8 +30,13 @@ import { curriculumRouter, subjectSchema } from './curriculum.js';
 import { moderationRouter, checkRules, seasonText, decide, addAiReview } from './moderation.js';
 import { analyticsRouter, styleInsights } from './analytics.js';
 import { recommendRouter } from './recommend.js';
+import { videoPoster } from './posters.js';
+import { recoveryRouter } from './recovery.js';
+import { enqueueRender, startRenderWorker } from './render-queue.js';
 
 const app = express();
+// Enable only behind the single reverse proxy; the container has no public host port.
+if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy', 1);
 const exec = promisify(execFile);
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -72,21 +78,24 @@ const fail = (message: string) => {
 };
 const demo = process.env.DEMO_MODE === 'true';
 const limitMap = new Map<string, { n: number; until: number }>();
-app.use('/api/auth', (req, res, next) => {
-  const key = req.ip || 'local';
+app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
+  const key = `${req.baseUrl}:${req.ip || 'local'}`;
   const now = Date.now();
   let r = limitMap.get(key);
   if (!r || r.until < now) {
     r = { n: 0, until: now + 10 * 60000 };
     limitMap.set(key, r);
   }
-  if (++r.n > 40) {
+  // A class may share one school IP; opening an invitation is less sensitive than login.
+  const limit = req.baseUrl === '/api/invitations' ? 120 : 40;
+  if (++r.n > limit) {
     res.status(429).json({ error: 'Слишком много попыток. Подождите 10 минут.' });
     return;
   }
   if (limitMap.size > 10000) for (const [k, v] of limitMap) if (v.until < now) limitMap.delete(k);
   next();
 });
+app.use('/api/auth', recoveryRouter());
 // Public seasons hidden by complaints leave the shared feed but stay with assigned classes.
 const visibilitySql =
   "((s.visibility='public' AND NOT s.hidden) OR s.owner_id=$1 OR EXISTS(SELECT 1 FROM assignments av JOIN memberships mv ON mv.class_id=av.class_id WHERE av.season_id=s.id AND mv.user_id=$1))";
@@ -162,25 +171,25 @@ app.post('/api/auth/register', async (req, res) => {
       name: z.string().trim().min(2).max(80),
       role: z.enum(['student', 'teacher', 'creator']),
       grade: z.number().int().min(5).max(11).default(7),
+      language: z.enum(['ru', 'kk']).default('ru'),
     })
     .parse(req.body);
   if (await one('SELECT id FROM users WHERE email=$1', [data.email]))
     throw new HttpError(409, 'Этот email уже зарегистрирован');
   const id = randomUUID();
   const user = await one(
-    'INSERT INTO users(id,name,email,password_hash,role,grade) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
-    [id, data.name, data.email, hashPassword(data.password), data.role, data.grade],
+    'INSERT INTO users(id,name,email,password_hash,role,grade,language) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+    [id, data.name, data.email, hashPassword(data.password), data.role, data.grade, data.language],
   );
   await createSession(res, id);
   res.status(201).json({ user: publicUser(user) });
 });
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = accountSchema.parse(req.body);
-  const u = await one('SELECT * FROM users WHERE email=$1', [email]);
-  if (!u || !verifyPassword(password, u.password_hash))
-    throw new HttpError(401, 'Неверный email или пароль');
-  await createSession(res, u.id);
-  res.json({ user: publicUser(u) });
+  const session = await authenticateWithPassword(db, email, password);
+  if (!session) throw new HttpError(401, 'Неверный email или пароль');
+  setSessionCookie(res, session.token);
+  res.json({ user: publicUser(session.user) });
 });
 app.post('/api/auth/logout', async (req, res) => {
   const t = cookieToken(req);
@@ -207,6 +216,7 @@ app.patch('/api/profile', required, async (req, res) => {
 const catalogSql = `SELECT s.id,s.title,s.description,s.subject,s.language,s.grade,s.color,s.art,s.status,s.created_at,s.source_name,
  s.style,s.voice,s.topic_id,s.hidden,s.moderation_note,(SELECT name FROM users WHERE id=s.owner_id) owner_name,
  (SELECT count(*)::int FROM episodes e WHERE e.season_id=s.id) episode_count,
+ (SELECT e.id FROM episodes e WHERE e.season_id=s.id AND e.media_path IS NOT NULL ORDER BY e.position LIMIT 1) cover_episode_id,
  (SELECT coalesce(sum(duration),0)::int FROM episodes e WHERE e.season_id=s.id) duration,
  (SELECT count(*)::int FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) completed,
  (SELECT max(round(100.0*a.score/a.total))::int FROM assessment_attempts a WHERE a.season_id=s.id AND a.user_id=$1) best_score,
@@ -347,12 +357,21 @@ app.get('/api/seasons/:id', async (req, res) => {
     retellings,
   });
 });
-app.get('/api/episodes/:id/video', async (req, res) => {
+app.get(['/api/episodes/:id/video', '/api/episodes/:id/poster'], async (req, res) => {
   const ep = await one(
     `SELECT e.media_path,e.title,s.status,s.owner_id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE e.id=$2 AND ((s.status='published' AND ${visibilitySql}) OR s.owner_id=$1 OR $3)`,
     [req.user?.id || null, uid.parse(req.params.id), Boolean(req.user?.is_moderator)],
   );
   if (!ep || !ep.media_path) notFound();
+  // The same permission check runs even when this image has already been cached.
+  if (req.path.endsWith('/poster')) {
+    try {
+      res.type('image/jpeg').send(await videoPoster(ep.media_path));
+    } catch {
+      res.status(404).json({ error: 'Обложка недоступна' });
+    }
+    return;
+  }
   // Authors download their own cut to post on TikTok or Reels with the OylaTap signature.
   if (req.query.download === '1' && ep.owner_id === req.user?.id)
     res.attachment(`${ep.title.replace(/[^\p{L}\d]+/gu, '-').slice(0, 60) || 'oylatap'}.mp4`);
@@ -425,26 +444,42 @@ app.post('/api/classes', required, teacher, async (req, res) => {
       ]),
     );
 });
+const classCodeSchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(16)
+  .transform((value) => value.toUpperCase());
+app.get('/api/invitations/:code', async (req, res) => {
+  const code = classCodeSchema.parse(req.params.code);
+  const invitation = await one(
+    `SELECT c.name,EXISTS(SELECT 1 FROM memberships m WHERE m.class_id=c.id AND m.user_id=$2) joined
+     FROM classrooms c WHERE c.code=$1`,
+    [code, req.user?.id || null],
+  );
+  if (!invitation)
+    throw new HttpError(404, 'Приглашение не найдено. Попроси учителя проверить ссылку.');
+  res.json(invitation);
+});
 app.post('/api/classes/join', required, async (req, res) => {
   if (req.user!.role !== 'student')
     throw new HttpError(403, 'К классу могут присоединяться ученики');
-  const { code } = z
-    .object({
-      code: z
-        .string()
-        .trim()
-        .min(4)
-        .max(16)
-        .transform((x) => x.toUpperCase()),
-    })
-    .parse(req.body);
-  const c = await one('SELECT id,name FROM classrooms WHERE code=$1', [code]);
+  const { code } = z.object({ code: classCodeSchema }).parse(req.body);
+  const c = await one('SELECT id,name,current_season_id FROM classrooms WHERE code=$1', [code]);
   if (!c) fail('Класс с таким кодом не найден');
   await db.query('INSERT INTO memberships(class_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [
     c.id,
     req.user!.id,
   ]);
-  res.json(c);
+  const next = await one(
+    `SELECT s.id,s.title FROM assignments a JOIN seasons s ON s.id=a.season_id
+     WHERE a.class_id=$2 AND s.status='published' AND ${visibilitySql}
+     ORDER BY coalesce(s.id=$3,false) DESC,
+       EXISTS(SELECT 1 FROM assessment_attempts t WHERE t.user_id=$1 AND t.season_id=s.id),
+       a.due_at,a.id LIMIT 1`,
+    [req.user!.id, c.id, c.current_season_id],
+  );
+  res.json({ id: c.id, name: c.name, next_path: next ? `/learn/${next.id}` : '/assignments' });
 });
 app.get('/api/assignments', required, async (req, res) => {
   res.json(
@@ -704,12 +739,8 @@ app.post('/api/material/extract', required, author, upload.single('file'), async
 });
 app.post('/api/seasons/:id/render', required, author, async (req, res) => {
   await owned(req);
-  const updated = await db.query(
-    "UPDATE seasons SET status='rendering',render_error=NULL WHERE id=$1 AND status IN ('draft','review','failed','rejected') RETURNING id",
-    [req.params.id],
-  );
-  if (!updated.rowCount) throw new HttpError(409, 'Сезон уже собирается или опубликован');
-  void renderSeason(String(req.params.id));
+  const queued = await enqueueRender(db, uid.parse(req.params.id), req.user!.id);
+  if (!queued) throw new HttpError(409, 'Сезон уже собирается или опубликован');
   res.status(202).json({ ok: true });
 });
 app.post('/api/seasons/:id/publish', required, author, async (req, res) => {
@@ -1073,10 +1104,8 @@ if (process.env.NODE_ENV === 'production') {
   app.use(vite.middlewares);
 }
 await db.query('SELECT 1');
-await db.query(
-  "UPDATE seasons SET status='failed',render_error='Сервер перезапущен во время сборки. Можно повторить без потери сценария.' WHERE status='rendering'",
-);
 await db.query('DELETE FROM sessions WHERE expires_at<now()');
+const stopRenderWorker = startRenderWorker(db, renderSeason);
 const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: Error) => {
   if (error) {
     console.error('OylaTap could not bind its port:', error.message);
@@ -1087,6 +1116,8 @@ const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: 
 for (const sig of ['SIGINT', 'SIGTERM'])
   process.on(sig, () => {
     server.close(() => {
-      void db.end().then(() => process.exit(0));
+      void stopRenderWorker()
+        .then(() => db.end())
+        .then(() => process.exit(0));
     });
   });

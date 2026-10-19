@@ -6,6 +6,8 @@ import { Shell, Private } from './components';
 import Auth from './Auth';
 import { ReminderTicker } from './Learning';
 import { SeasonPage } from './SeasonPage';
+import { JoinClassPage } from './JoinClass';
+import { RecoveryPage } from './Recovery';
 import { HistoryPage, AttemptPage, PracticePage } from './Assessments';
 import { Feed, LibraryPage, AssignmentsPage, ProgressPage, ProfilePage } from './Student';
 import { StudioPage, EditorPage, ClassesPage } from './Teacher';
@@ -29,6 +31,9 @@ function App() {
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/learn/:id" element={<SeasonPage />} />
         <Route path="/author/:id" element={<AuthorPage />} />
+        <Route path="/join/:code" element={<JoinClassPage />} />
+        <Route path="/forgot-password" element={<RecoveryPage key="forgot" />} />
+        <Route path="/reset-password" element={<RecoveryPage key="reset" />} />
         <Route
           path="/attempts"
           element={

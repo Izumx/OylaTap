@@ -3454,6 +3454,165 @@ td .muted {
   display: block;
   width: 100%;
 }
+.video-cover {
+  display: block;
+  object-position: center 35%;
+}
+.topic-cover:has(.video-cover) {
+  aspect-ratio: 4 / 5;
+  max-height: 370px;
+  transform: none;
+}
+.topic-cover .video-cover {
+  height: 100%;
+}
+.topic-next-step {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line, #343e3a);
+}
+.topic-next-step > strong {
+  font-size: 13px;
+  color: var(--mint);
+}
+.topic-next-step > p {
+  max-width: 46ch;
+  margin: 8px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.invitation-page {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.recovery-page {
+  display: grid;
+  justify-items: center;
+  padding-block: 40px;
+}
+.recovery-card {
+  width: min(100%, 500px);
+  min-width: 0;
+  padding: clamp(24px, 4vw, 40px);
+}
+.recovery-card h1 {
+  font-size: clamp(25px, 4vw, 32px);
+  line-height: 1.25;
+  margin-bottom: 18px;
+}
+.recovery-card > p,
+.recovery-card > [role='status'] {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 22px;
+}
+.recovery-card > p:last-child {
+  margin-top: 24px;
+  margin-bottom: 0;
+}
+.invitation-card {
+  padding: clamp(24px, 5vw, 48px);
+}
+.invitation-symbol {
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  color: var(--mint);
+  background: #9bc5b414;
+  border-radius: 20px;
+  margin-bottom: 24px;
+}
+.invitation-caption {
+  color: var(--mint);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.invitation-card h1 {
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.invitation-description,
+.invitation-error p,
+.invitation-account p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 18px 0;
+}
+.invitation-steps {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0;
+  display: grid;
+  gap: 16px;
+}
+.invitation-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.invitation-steps li > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border, #3b4742);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.invitation-steps .current,
+.invitation-steps .done {
+  color: var(--mint);
+}
+.invitation-steps .current > span {
+  border-color: var(--mint);
+}
+.invitation-card .button + .small {
+  line-height: 1.7;
+  margin-top: 16px;
+}
+.invitation-account-name {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.invitation-account h2 {
+  font-size: 20px;
+}
+.auth-invitation-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--mint);
+  margin-bottom: 20px;
+}
+.class-invite-link {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 18px 0;
+}
+.class-invite-link label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.class-invite-link input {
+  width: 100%;
+  min-width: 0;
+  font-size: 16px;
+}
+.class-invite-link .button {
+  white-space: normal;
+  line-height: 1.5;
+}
+.micro-result .micro-next {
+  font-weight: 600;
+  color: var(--text, #e1e8e4);
+}
 .topic-save-note {
   display: block;
   max-width: 360px;
@@ -3675,6 +3834,13 @@ td .muted {
   }
   .topic-cover {
     display: none;
+  }
+  .topic-cover:has(.video-cover) {
+    display: block;
+    grid-row: 1;
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    max-height: 230px;
   }
 }
 @media (max-width: 720px) {
