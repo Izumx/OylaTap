@@ -7,3 +7,6 @@ dist/
 test-results/
 playwright-report/
 *.log
+
+# Pitch decks and demo media stay local: they include team photos.
+deliverables/
