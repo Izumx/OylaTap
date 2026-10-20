@@ -35,7 +35,10 @@ function JoinClass({ code }: { code: string }) {
   }, [user?.id]);
   async function join() {
     const joiningAccount = user?.id;
-    const current = () => mounted.current && account.current === joiningAccount;
+    const current = () =>
+      mounted.current &&
+      account.current === joiningAccount &&
+      window.location.pathname === `/join/${encodeURIComponent(code)}`;
     setBusy(true);
     setError('');
     try {
@@ -52,7 +55,9 @@ function JoinClass({ code }: { code: string }) {
   async function switchAccount() {
     const originalAccount = user?.id;
     const current = () =>
-      mounted.current && (!account.current || account.current === originalAccount);
+      mounted.current &&
+      window.location.pathname === `/join/${encodeURIComponent(code)}` &&
+      (!account.current || account.current === originalAccount);
     setBusy(true);
     setError('');
     try {
