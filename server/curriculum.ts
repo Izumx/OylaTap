@@ -7,6 +7,7 @@ export const subjectIds = [
   'world-history',
   'kz-literature',
   'ru-literature',
+  'world-literature',
   'algebra',
   'geometry',
 ] as const;

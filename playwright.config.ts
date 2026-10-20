@@ -1,4 +1,14 @@
 import { defineConfig } from '@playwright/test';
+import 'dotenv/config';
+// Fixtures must never repopulate a user's real catalogue or share its media folder.
+const testDatabase = new URL(process.env.TEST_DATABASE_URL || process.env.DATABASE_URL!);
+if (!process.env.TEST_DATABASE_URL) testDatabase.pathname += '_e2e';
+if (!testDatabase.pathname.endsWith('_e2e'))
+  throw new Error('TEST_DATABASE_URL must use a separate _e2e database.');
+process.env.DATABASE_URL = testDatabase.toString();
+process.env.TEST_DATABASE_URL = testDatabase.toString();
+process.env.DATA_DIR = '.local/e2e/uploads';
+process.env.DEMO_MODE = 'true';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
@@ -21,10 +31,10 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'node --import tsx server/index.ts',
+    command: 'node --import tsx scripts/start-test-server.ts',
     env: { PORT: '3100' },
     url: 'http://127.0.0.1:3100/api/health',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    reuseExistingServer: false,
+    timeout: 240000,
   },
 });

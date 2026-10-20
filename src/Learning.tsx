@@ -19,6 +19,7 @@ export function LearningPreferences() {
     'world-history': Globe2,
     'kz-literature': BookOpen,
     'ru-literature': Feather,
+    'world-literature': BookOpen,
     algebra: Sigma,
     geometry: Triangle,
   };

@@ -9,6 +9,7 @@
     "start": "tsx scripts/start.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
+    "content:sync": "tsx scripts/sync-content.ts",
     "backup": "node scripts/backup.mjs",
     "backup:verify": "node scripts/restore.mjs --verify",
     "backup:test": "node --test scripts/backup-tests.mjs",

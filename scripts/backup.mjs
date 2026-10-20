@@ -38,6 +38,7 @@ async function main() {
       ...new Set([
         ...references.map((r) => r.original),
         'content/khanate-flow/oylatap-khanate-full-ru.mp4',
+        'content/little-prince-grok/oylatap-little-prince-kk.mp4',
       ]),
     ];
     const files = [];

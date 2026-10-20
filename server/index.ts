@@ -640,7 +640,7 @@ async function saveSeason(
           data.source_name,
           data.subject === 'kz-literature'
             ? 'peach'
-            : data.subject === 'ru-literature'
+            : ['ru-literature', 'world-literature'].includes(data.subject)
               ? 'lilac'
               : data.subject === 'world-history'
                 ? 'blue'

@@ -117,6 +117,7 @@ export const subjects: Record<string, [string, string]> = {
   'world-history': ['Всемирная история', 'Дүниежүзі тарихы'],
   'kz-literature': ['Казахская литература', 'Қазақ әдебиеті'],
   'ru-literature': ['Русская литература', 'Орыс әдебиеті'],
+  'world-literature': ['Мировая литература', 'Әлем әдебиеті'],
   algebra: ['Алгебра', 'Алгебра'],
   geometry: ['Геометрия', 'Геометрия'],
 };

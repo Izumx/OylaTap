@@ -20,6 +20,7 @@ try {
     '010_author_follows',
     '010_password_reset',
     '011_render_jobs',
+    '012_world_literature',
   ]) {
     if (
       !(await client.query('SELECT name FROM schema_migrations WHERE name=$1', [name])).rowCount
