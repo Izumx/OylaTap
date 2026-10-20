@@ -530,13 +530,15 @@ test('quiet feed keeps focus and appearance preferences, and supports pause and 
   await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   const seek = page.locator('.feed-slide').first().getByRole('slider', { name: 'Позиция видео' });
   await seek.press('Home');
-  await expect.poll(async () => Number(await seek.inputValue())).toBe(0);
+  // Encoded MP4 timestamps can settle one range step after Home in Chrome.
+  await expect.poll(async () => Number(await seek.inputValue())).toBeLessThanOrEqual(0.1);
+  const start = Number(await seek.inputValue());
   await seek.press('ArrowRight');
+  await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThan(start);
   const firstStep = Number(await seek.inputValue());
-  expect(firstStep).toBeGreaterThan(0);
   await seek.press('ArrowRight');
+  await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThan(firstStep);
   const secondStep = Number(await seek.inputValue());
-  expect(secondStep).toBeGreaterThan(firstStep);
   await expect
     .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
     .toBeCloseTo(secondStep, 1);
