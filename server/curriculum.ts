@@ -10,6 +10,9 @@ export const subjectIds = [
   'world-literature',
   'algebra',
   'geometry',
+  'physics',
+  'biology',
+  'geography',
 ] as const;
 export const subjectSchema = z.enum(subjectIds);
 

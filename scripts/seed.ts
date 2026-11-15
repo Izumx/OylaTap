@@ -1,7 +1,7 @@
 import { randomUUID, randomBytes } from 'node:crypto';
 import { db, one } from '../server/db.js';
 import { hashPassword } from '../server/auth.js';
-import { khanateId, syncBundledContent } from './bundled-content.js';
+import { bundledHooks, khanateId, syncBundledContent } from './bundled-content.js';
 
 if (process.env.DEMO_MODE !== 'true')
   throw new Error('Demo seeding requires DEMO_MODE=true. Do not seed a live school database.');
@@ -44,8 +44,15 @@ try {
     "INSERT INTO assignments(id,class_id,season_id,due_at) VALUES($1,$2,$3,now()+interval '7 days') ON CONFLICT(class_id,season_id) DO NOTHING",
     [randomUUID(), classId, khanateId],
   );
+  // A ready lesson hook for the demo: the bridge riddle, before the reveal and without bets.
+  await db.query(
+    `INSERT INTO hook_runs(id,class_id,season_id,created_by,lesson_at)
+     VALUES('50000000-0000-4000-8000-000000000001',$1,$2,$3,date_trunc('day',now())+interval '1 day 9 hours')
+     ON CONFLICT(class_id,season_id) DO NOTHING`,
+    [classId, bundledHooks[0].id, teacherId],
+  );
   console.log(
-    'Demo accounts and classroom ready. Two real videos; ' +
+    'Demo accounts and classroom ready. Two real videos and six lesson hooks; ' +
       result.removedSeasons.length +
       ' legacy template topics removed.',
   );

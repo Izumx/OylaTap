@@ -35,6 +35,7 @@ import {
 } from './lib';
 import { PageHeader, State, SeasonCard, Modal } from './components';
 import { VoiceInput, FlagList, StyleAdvice } from './Creator';
+import { HookRunsList } from './Hooks';
 import type { ResultRow } from './report-types';
 
 export function StudioPage() {
@@ -1444,6 +1445,7 @@ export function ClassesPage() {
                     'Кодты енгізу ыңғайлы болса, оқушы аккаунтында «Тапсырмалар» бетін ашыңыз.',
                   )}
                 </p>
+                <HookRunsList classId={c.id} />
                 <Link className="button secondary full" to={`/results?class_id=${c.id}`}>
                   {t('Результаты класса', 'Сынып нәтижелері')}
                   <ArrowRight size={16} />

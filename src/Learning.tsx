@@ -9,6 +9,9 @@ import {
   Feather,
   Sigma,
   Triangle,
+  Atom,
+  Leaf,
+  Map as MapIcon,
   ChevronDown,
 } from 'lucide-react';
 import { api, post, useApp, useResource, subjects, type Season } from './lib';
@@ -22,6 +25,9 @@ export function LearningPreferences() {
     'world-literature': BookOpen,
     algebra: Sigma,
     geometry: Triangle,
+    physics: Atom,
+    biology: Leaf,
+    geography: MapIcon,
   };
   const r = useResource<any>('/learning-preferences'),
     catalog = useResource<Season[]>('/catalog');

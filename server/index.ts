@@ -23,6 +23,8 @@ import {
 } from './auth.js';
 import { dataDir, renderSeason, ttsAvailable } from './render.js';
 import { dailyRouter } from './daily.js';
+import { hooksRouter } from './hooks.js';
+import { guestActivity, guestRouter, purgeGuests } from './guests.js';
 import { assessmentsRouter } from './assessments.js';
 import { reportsRouter } from './reports.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
@@ -57,6 +59,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '2mb' }));
 app.use('/api', auth);
+app.use('/api', guestActivity);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 80 * 1024 * 1024, files: 1, fields: 3 },
@@ -79,7 +82,8 @@ const fail = (message: string) => {
 const demo = process.env.DEMO_MODE === 'true';
 const limitMap = new Map<string, { n: number; until: number }>();
 app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
-  const key = `${req.baseUrl}:${req.ip || 'local'}`;
+  const guestJoin = req.baseUrl === '/api/auth' && req.path === '/guest';
+  const key = `${guestJoin ? '/api/auth/guest' : req.baseUrl}:${req.ip || 'local'}`;
   const now = Date.now();
   let r = limitMap.get(key);
   if (!r || r.until < now) {
@@ -87,7 +91,7 @@ app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
     limitMap.set(key, r);
   }
   // A class may share one school IP; opening an invitation is less sensitive than login.
-  const limit = req.baseUrl === '/api/invitations' ? 120 : 40;
+  const limit = guestJoin ? 300 : req.baseUrl === '/api/invitations' ? 120 : 40;
   if (++r.n > limit) {
     res.status(429).json({ error: 'Слишком много попыток. Подождите 10 минут.' });
     return;
@@ -96,6 +100,7 @@ app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
   next();
 });
 app.use('/api/auth', recoveryRouter());
+app.use('/api', guestRouter());
 // Public seasons hidden by complaints leave the shared feed but stay with assigned classes.
 const visibilitySql =
   "((s.visibility='public' AND NOT s.hidden) OR s.owner_id=$1 OR EXISTS(SELECT 1 FROM assignments av JOIN memberships mv ON mv.class_id=av.class_id WHERE av.season_id=s.id AND mv.user_id=$1))";
@@ -110,6 +115,7 @@ const publicUser = (u: any) => ({
   is_moderator: u.is_moderator,
 });
 app.use('/api', dailyRouter(visibilitySql));
+app.use('/api', hooksRouter(visibilitySql));
 app.use('/api', assessmentsRouter(visibilitySql));
 app.use('/api', curriculumRouter());
 app.use('/api', moderationRouter(visibilitySql));
@@ -227,7 +233,7 @@ app.get('/api/catalog', async (req, res) =>
   res.json(
     await rows(
       catalogSql +
-        " WHERE s.status='published' AND " +
+        " WHERE s.status='published' AND s.kind='lesson' AND " +
         visibilitySql +
         ' ORDER BY s.created_at,s.id',
       [req.user?.id || null],
@@ -250,7 +256,7 @@ app.get('/api/authors/:id', async (req, res) => {
   if (!profile) notFound();
   const seasons = await rows(
     catalogSql +
-      " WHERE s.owner_id=$2 AND s.status='published' AND " +
+      " WHERE s.owner_id=$2 AND s.status='published' AND s.kind='lesson' AND " +
       visibilitySql +
       ' ORDER BY s.published_at DESC NULLS LAST,s.id',
     [req.user?.id || null, id],
@@ -282,7 +288,7 @@ app.post('/api/authors/:id/follow', required, async (req, res) => {
 });
 app.get('/api/my-seasons', required, author, async (req, res) =>
   res.json(
-    await rows(catalogSql + ' WHERE s.owner_id=$2 ORDER BY s.created_at DESC', [
+    await rows(catalogSql + " WHERE s.owner_id=$2 AND s.kind='lesson' ORDER BY s.created_at DESC", [
       req.user!.id,
       req.user!.id,
     ]),
@@ -365,8 +371,14 @@ app.get(['/api/episodes/:id/video', '/api/episodes/:id/poster'], async (req, res
   if (!ep || !ep.media_path) notFound();
   // The same permission check runs even when this image has already been cached.
   if (req.path.endsWith('/poster')) {
+    const at = z.coerce
+      .number()
+      .min(0)
+      .max(30)
+      .default(0)
+      .parse(req.query.t ?? 0);
     try {
-      res.type('image/jpeg').send(await videoPoster(ep.media_path));
+      res.type('image/jpeg').send(await videoPoster(ep.media_path, at));
     } catch {
       res.status(404).json({ error: 'Обложка недоступна' });
     }
@@ -418,7 +430,7 @@ app.get('/api/progress', required, async (req, res) => {
     activity,
     seasons: await rows(
       catalogSql +
-        " WHERE s.status='published' AND (EXISTS(SELECT 1 FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) OR EXISTS(SELECT 1 FROM attempts a WHERE a.season_id=s.id AND a.user_id=$1)) ORDER BY s.id",
+        " WHERE s.status='published' AND s.kind='lesson' AND (EXISTS(SELECT 1 FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) OR EXISTS(SELECT 1 FROM attempts a WHERE a.season_id=s.id AND a.user_id=$1)) ORDER BY s.id",
       [id],
     ),
   });
@@ -507,7 +519,7 @@ app.post('/api/assignments', required, teacher, async (req, res) => {
     notFound();
   if (
     !(await one(
-      "SELECT id FROM seasons WHERE id=$1 AND status='published' AND ((visibility='public' AND NOT hidden) OR owner_id=$2)",
+      "SELECT id FROM seasons WHERE id=$1 AND status='published' AND kind='lesson' AND ((visibility='public' AND NOT hidden) OR owner_id=$2)",
       [d.season_id, req.user!.id],
     ))
   )
@@ -575,7 +587,8 @@ const seasonData = z
       });
   });
 async function owned(req: express.Request) {
-  const s = await one('SELECT * FROM seasons WHERE id=$1 AND owner_id=$2', [
+  // Lesson hooks are bundled content with their own flow; the studio never edits them.
+  const s = await one("SELECT * FROM seasons WHERE id=$1 AND owner_id=$2 AND kind='lesson'", [
     uid.parse(req.params.id),
     req.user!.id,
   ]);
@@ -1105,6 +1118,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 await db.query('SELECT 1');
 await db.query('DELETE FROM sessions WHERE expires_at<now()');
+await purgeGuests();
+setInterval(
+  () => void purgeGuests().catch((e) => console.error('Guest cleanup failed:', e)),
+  6 * 3600000,
+).unref();
 const stopRenderWorker = startRenderWorker(db, renderSeason);
 const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: Error) => {
   if (error) {

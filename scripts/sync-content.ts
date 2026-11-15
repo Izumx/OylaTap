@@ -20,7 +20,7 @@ try {
   const file = `.local/content-sync-${randomUUID()}.json`;
   await writeFile(file, JSON.stringify(result, null, 2));
   console.log(
-    `Two real videos ready; removed ${result.removedSeasons.length} template topics. Cleanup manifest: ${file}`,
+    `Two real videos and ${result.hooks.length} lesson hooks ready; removed ${result.removedSeasons.length} template topics. Cleanup manifest: ${file}`,
   );
 } finally {
   await db.end();

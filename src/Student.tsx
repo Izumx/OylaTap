@@ -51,6 +51,7 @@ import {
   type DailySession,
 } from './lib';
 import { Modal, State, PageHeader, SeasonArt, SeasonCard } from './components';
+import { StudentHooks, HookFeedNudge } from './Hooks';
 import { LearningPreferences } from './Learning';
 
 // `key` stays unique when the endless feed shows an episode again.
@@ -658,6 +659,7 @@ export function Feed() {
           </button>
         </div>
       </header>
+      {!id && <HookFeedNudge />}
       <State loading={loading} error={error} retry={reload}>
         {clips.length === 0 ? (
           <div className="empty-state">
@@ -2191,6 +2193,7 @@ export function AssignmentsPage() {
           <span key={c.id}>{c.name}</span>
         ))}
       </div>
+      <StudentHooks />
       <State {...r} retry={r.reload}>
         {r.data?.length ? (
           <div className="assignment-list">
