@@ -14,7 +14,7 @@ import { StudioPage, EditorPage, ClassesPage } from './Teacher';
 import { ResultsPage } from './Results';
 import { StatsPage, ModerationPage } from './Creator';
 import { AuthorPage } from './Authors';
-import { HookResultsPage } from './Hooks';
+import { HookResultsPage, ClassScreenPage } from './Hooks';
 import './style.css';
 import './comfort.css';
 import './reports.css';
@@ -25,6 +25,23 @@ import './authors.css';
 import './hooks.css';
 function App() {
   const loc = useLocation();
+  // The projector screen fills the whole display, without the app shell.
+  if (/^\/classes\/[^/]+\/hooks\/[^/]+\/screen\/?$/.test(loc.pathname))
+    return (
+      <>
+        <Routes>
+          <Route
+            path="/classes/:classId/hooks/:runId/screen"
+            element={
+              <Private teacher>
+                <ClassScreenPage />
+              </Private>
+            }
+          />
+        </Routes>
+        <Auth />
+      </>
+    );
   return (
     <Shell feed={loc.pathname === '/' || loc.pathname.startsWith('/watch/')}>
       <Routes>

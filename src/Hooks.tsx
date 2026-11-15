@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Clock3, MonitorPlay, Sparkles, UsersRound } from 'lucide-react';
-import { post, subjects, useApp, useResource } from './lib';
+import { api, post, subjects, useApp, useResource } from './lib';
 import { Modal, PageHeader, State } from './components';
 
 export type HookSummary = {
@@ -252,6 +253,149 @@ export function HookResultsPage() {
           </>
         )}
       </State>
+    </div>
+  );
+}
+
+type ScreenState = {
+  run_id: string;
+  prompt: string;
+  options: string[];
+  answered: number;
+  students: number;
+  votes: number[] | null;
+  confident: number | null;
+  correct: number | null;
+  explanation: string | null;
+  join_code: string;
+  revealed: boolean;
+};
+
+function JoinQr({ code }: { code: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const url = `${window.location.origin}/join/${code}`;
+  useEffect(() => {
+    if (ref.current)
+      void QRCode.toCanvas(ref.current, url, { width: 168, margin: 1, color: { dark: '#0d130c', light: '#ffffff' } });
+  }, [url]);
+  return <canvas ref={ref} aria-label={`QR: ${url}`} role="img" />;
+}
+
+export function ClassScreenPage() {
+  const { classId = '', runId = '' } = useParams();
+  const { t } = useApp();
+  const [s, setS] = useState<ScreenState | null>(null),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api<ScreenState>(`/hook-runs/${runId}/screen`)
+        .then((v) => {
+          if (alive) {
+            setS(v);
+            setError('');
+          }
+        })
+        .catch((e: Error) => alive && setError(e.message));
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, 3000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [runId]);
+  async function act(path: 'show-votes' | 'reveal' | 'restart') {
+    if (path === 'restart' && !window.confirm(t('Стереть все ставки и начать заново?', 'Барлық болжамды өшіріп, қайта бастау керек пе?')))
+      return;
+    setBusy(true);
+    try {
+      setS(await post(`/hook-runs/${runId}/${path}`));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!s)
+    return (
+      <div className="class-screen">
+        <State loading={!error} error={error || undefined}>
+          {null}
+        </State>
+      </div>
+    );
+  const max = Math.max(1, ...(s.votes || [0]));
+  const step = s.revealed ? 'restart' : s.votes ? 'reveal' : 'show-votes';
+  return (
+    <div className="class-screen">
+      <header className="screen-top">
+        <Link to="/classes" className="screen-exit">
+          <ArrowLeft size={18} />
+          {t('Классы', 'Сыныптар')}
+        </Link>
+        <span className="screen-brand">OylaTap · {t('Угадай до урока', 'Сабаққа дейін тап')}</span>
+        <Link to={`/classes/${classId}/hooks/${runId}`} className="screen-exit">
+          {t('Итоги', 'Қорытынды')}
+        </Link>
+      </header>
+      <main className="screen-main">
+        <section className="screen-question">
+          <h1>{s.prompt}</h1>
+          <div className="screen-answered" aria-live="polite">
+            <span>
+              {t('Ответили', 'Жауап берді')} {s.answered} {t('из', '/')} {s.students}
+            </span>
+            <span className="screen-dots" aria-hidden="true">
+              {Array.from({ length: Math.min(s.students, 40) }, (_, i) => (
+                <i key={i} className={i < s.answered ? 'on' : ''} />
+              ))}
+            </span>
+          </div>
+          <ol className="screen-options">
+            {s.options.map((o, i) => (
+              <li key={i} className={`screen-option ${s.correct === i ? 'correct' : ''} ${s.revealed && s.correct !== i ? 'dim' : ''}`}>
+                <span className="screen-letter">{'АБВГ'[i] || i + 1}</span>
+                <span className="screen-text">{o}</span>
+                {s.votes && (
+                  <>
+                    <span className="screen-bar">
+                      <i style={{ width: `${(100 * s.votes[i]) / max}%` }} />
+                    </span>
+                    <span className="screen-count">{s.votes[i]}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ol>
+          {s.votes && s.confident != null && (
+            <p className="screen-confident">
+              {t('уверенных', 'сенімді')}: {s.confident} {t('из', '/')} {s.answered}
+            </p>
+          )}
+          {s.revealed && s.explanation && <p className="screen-explanation">{s.explanation}</p>}
+          {error && (
+            <p className="error-inline" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
+        <aside className="screen-side">
+          <div className="screen-join">
+            <JoinQr code={s.join_code} />
+            <span>{t('Код класса', 'Сынып коды')}</span>
+            <b>{s.join_code}</b>
+            <small>{window.location.host}/join</small>
+          </div>
+          <button className={`button ${step === 'restart' ? 'secondary' : 'primary'} screen-action`} disabled={busy} onClick={() => void act(step)}>
+            {step === 'show-votes' && t('Показать голоса', 'Дауыстарды көрсету')}
+            {step === 'reveal' && t('Раскрыть ответ', 'Жауапты ашу')}
+            {step === 'restart' && t('Начать заново', 'Қайта бастау')}
+          </button>
+        </aside>
+      </main>
     </div>
   );
 }

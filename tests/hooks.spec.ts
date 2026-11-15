@@ -362,3 +362,27 @@ test('teacher sees results with names, confidence and reasons', async ({ browser
   await expect(row).toContainText('Силы тянут и толкают');
   await expect(page.locator('.hook-result-row', { hasText: 'Данияр' })).toContainText('наугад');
 });
+
+test('class screen updates answers live and reveals on click', async ({ browser }) => {
+  const { t, students, c, run } = await hookClass(browser, ['Жансая Секретова']);
+  const page = await t.context.newPage();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(`/classes/${c.id}/hooks/${run.id}/screen`);
+  await expect(page.getByRole('heading', { name: /мосту упасть/ })).toBeVisible();
+  await expect(page.getByText('Ответили 0 из 1')).toBeVisible();
+  await expect(page.locator('.screen-join')).toContainText(c.code);
+  await expect(page.locator('.screen-join canvas, .screen-join img')).toBeVisible();
+  await post(students[0], `/hook-runs/${run.id}/guess`, {
+    phase: 'before',
+    answer: 1,
+    confidence: 3,
+  });
+  await expect(page.getByText('Ответили 1 из 1')).toBeVisible({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Показать голоса' }).click();
+  await expect(page.locator('.screen-option').nth(1).locator('.screen-count')).toHaveText('1');
+  await expect(page.getByText('уверенных: 1 из 1')).toBeVisible();
+  await page.getByRole('button', { name: 'Раскрыть ответ' }).click();
+  await expect(page.locator('.screen-option.correct')).toContainText('Силы уравновешены');
+  await expect(page.getByRole('button', { name: 'Начать заново' })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('Жансая');
+});
