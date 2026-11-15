@@ -37,6 +37,8 @@ import { recoveryRouter } from './recovery.js';
 import { enqueueRender, startRenderWorker } from './render-queue.js';
 
 const app = express();
+// On Vercel the API runs as one serverless function; video files are static assets there.
+const onVercel = Boolean(process.env.VERCEL);
 // Enable only behind the single reverse proxy; the container has no public host port.
 if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy', 1);
 const exec = promisify(execFile);
@@ -369,6 +371,15 @@ app.get(['/api/episodes/:id/video', '/api/episodes/:id/poster'], async (req, res
     [req.user?.id || null, uid.parse(req.params.id), Boolean(req.user?.is_moderator)],
   );
   if (!ep || !ep.media_path) notFound();
+  if (onVercel) {
+    // Function responses are capped at 4.5 MB: bundled files are served as static assets.
+    if (!String(ep.media_path).startsWith('content/')) notFound();
+    const file = req.path.endsWith('/poster')
+      ? ep.media_path.replace(/\.mp4$/, '.poster.jpg')
+      : ep.media_path;
+    res.redirect(302, '/' + file);
+    return;
+  }
   // The same permission check runs even when this image has already been cached.
   if (req.path.endsWith('/poster')) {
     const at = z.coerce
@@ -752,6 +763,8 @@ app.post('/api/material/extract', required, author, upload.single('file'), async
 });
 app.post('/api/seasons/:id/render', required, author, async (req, res) => {
   await owned(req);
+  if (onVercel)
+    throw new HttpError(503, 'Сборка видео работает только на основном сервере OylaTap');
   const queued = await enqueueRender(db, uid.parse(req.params.id), req.user!.id);
   if (!queued) throw new HttpError(409, 'Сезон уже собирается или опубликован');
   res.status(202).json({ ok: true });
@@ -1104,7 +1117,9 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
     error: error instanceof HttpError ? error.message : 'Ошибка сервера. Попробуйте снова.',
   });
 });
-if (process.env.NODE_ENV === 'production') {
+if (onVercel) {
+  // Vercel serves dist/ itself and calls the exported app for /api/*.
+} else if (process.env.NODE_ENV === 'production') {
   app.use(express.static(resolve('dist')));
   app.get('/{*splat}', (req, res) => res.sendFile(resolve('dist/index.html')));
 } else {
@@ -1116,26 +1131,29 @@ if (process.env.NODE_ENV === 'production') {
   });
   app.use(vite.middlewares);
 }
-await db.query('SELECT 1');
-await db.query('DELETE FROM sessions WHERE expires_at<now()');
-await purgeGuests();
-setInterval(
-  () => void purgeGuests().catch((e) => console.error('Guest cleanup failed:', e)),
-  6 * 3600000,
-).unref();
-const stopRenderWorker = startRenderWorker(db, renderSeason);
-const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: Error) => {
-  if (error) {
-    console.error('OylaTap could not bind its port:', error.message);
-    process.exit(1);
-  }
-  console.log('OylaTap running; database: PostgreSQL');
-});
-for (const sig of ['SIGINT', 'SIGTERM'])
-  process.on(sig, () => {
-    server.close(() => {
-      void stopRenderWorker()
-        .then(() => db.end())
-        .then(() => process.exit(0));
-    });
+if (!onVercel) {
+  await db.query('SELECT 1');
+  await db.query('DELETE FROM sessions WHERE expires_at<now()');
+  await purgeGuests();
+  setInterval(
+    () => void purgeGuests().catch((e) => console.error('Guest cleanup failed:', e)),
+    6 * 3600000,
+  ).unref();
+  const stopRenderWorker = startRenderWorker(db, renderSeason);
+  const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: Error) => {
+    if (error) {
+      console.error('OylaTap could not bind its port:', error.message);
+      process.exit(1);
+    }
+    console.log('OylaTap running; database: PostgreSQL');
   });
+  for (const sig of ['SIGINT', 'SIGTERM'])
+    process.on(sig, () => {
+      server.close(() => {
+        void stopRenderWorker()
+          .then(() => db.end())
+          .then(() => process.exit(0));
+      });
+    });
+}
+export default app;
