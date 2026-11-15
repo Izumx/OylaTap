@@ -477,7 +477,7 @@ test('hook card poster skips the dark intro of the episode', async ({ browser })
   await syncBundledHooks(db, t.id);
   const ep = (await db.query('SELECT id FROM episodes WHERE season_id=$1', [ids[0]])).rows[0].id;
   const first = await t.context.request.get(`/api/episodes/${ep}/poster`);
-  const later = await t.context.request.get(`/api/episodes/${ep}/poster?t=4`);
+  const later = await t.context.request.get(`/api/episodes/${ep}/poster?t=8`);
   expect(later.status()).toBe(200);
   expect(later.headers()['content-type']).toContain('image/jpeg');
   // A black intro frame compresses to a tiny JPEG; the bridge scene does not.

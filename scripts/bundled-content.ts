@@ -90,12 +90,12 @@ const hookArt: Record<string, [string, string]> = {
 };
 export const bundledHooks = (
   [
-    ['physics-bridge', hook1, 27],
-    ['algebra-square', hook2, 29],
-    ['history-khanate', hook3, 32],
-    ['biology-leaf', hook4, 28],
-    ['geography-climate', hook5, 29],
-    ['literature-abai', hook6, 33],
+    ['physics-bridge', hook1, 33],
+    ['algebra-square', hook2, 34],
+    ['history-khanate', hook3, 35],
+    ['biology-leaf', hook4, 33],
+    ['geography-climate', hook5, 35],
+    ['literature-abai', hook6, 35],
   ] as const
 ).map(([slug, raw, duration], i) => ({
   id: `30000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
