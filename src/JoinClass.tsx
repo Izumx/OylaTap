@@ -18,7 +18,8 @@ function JoinClass({ code }: { code: string }) {
     loading ? null : `/invitations/${encodeURIComponent(code)}?account=${user?.id || 'guest'}`,
   );
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [guestName, setGuestName] = useState('');
   const navigate = useNavigate();
   const mounted = useRef(false);
   const account = useRef(user?.id);
@@ -50,6 +51,21 @@ function JoinClass({ code }: { code: string }) {
       if (current()) setError((e as Error).message);
     } finally {
       if (current()) setBusy(false);
+    }
+  }
+  async function joinAsGuest() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await post('/auth/guest', { code, name: guestName });
+      await refresh();
+      if (!mounted.current) return;
+      notify(t(`Ты в классе «${result.class_name}»!`, `«${result.class_name}» сыныбына қосылдың!`));
+      navigate(result.next_path);
+    } catch (e) {
+      if (mounted.current) setError((e as Error).message);
+    } finally {
+      if (mounted.current) setBusy(false);
     }
   }
   async function switchAccount() {
@@ -173,7 +189,40 @@ function JoinClass({ code }: { code: string }) {
                   </>
                 ) : (
                   <>
-                    <button className="button primary full" onClick={login}>
+                    <form
+                      className="guest-join"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void joinAsGuest();
+                      }}
+                    >
+                      <label htmlFor="guest-name">{t('Твоё имя', 'Сенің атың')}</label>
+                      <input
+                        id="guest-name"
+                        value={guestName}
+                        minLength={2}
+                        maxLength={40}
+                        required
+                        autoComplete="given-name"
+                        onChange={(e) => setGuestName(e.target.value)}
+                        placeholder={t('Например, Айгерим', 'Мысалы, Айгерім')}
+                      />
+                      <button className="button primary full" disabled={busy}>
+                        {busy ? (
+                          <LoaderCircle size={18} className="spin" />
+                        ) : (
+                          <ArrowRight size={18} />
+                        )}
+                        {t('Войти по имени', 'Атыммен кіру')}
+                      </button>
+                      <p className="muted small">
+                        {t(
+                          'Без почты и пароля: учитель увидит только твоё имя и ответы.',
+                          'Поштасыз және құпиясөзсіз: мұғалім тек атыңды және жауаптарыңды көреді.',
+                        )}
+                      </p>
+                    </form>
+                    <button className="button secondary full" onClick={login}>
                       {t('Войти и продолжить', 'Кіру және жалғастыру')}
                       <ArrowRight size={18} />
                     </button>

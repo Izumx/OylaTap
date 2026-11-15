@@ -24,6 +24,7 @@ import {
 import { dataDir, renderSeason, ttsAvailable } from './render.js';
 import { dailyRouter } from './daily.js';
 import { hooksRouter } from './hooks.js';
+import { guestActivity, guestRouter, purgeGuests } from './guests.js';
 import { assessmentsRouter } from './assessments.js';
 import { reportsRouter } from './reports.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
@@ -58,6 +59,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '2mb' }));
 app.use('/api', auth);
+app.use('/api', guestActivity);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 80 * 1024 * 1024, files: 1, fields: 3 },
@@ -80,7 +82,8 @@ const fail = (message: string) => {
 const demo = process.env.DEMO_MODE === 'true';
 const limitMap = new Map<string, { n: number; until: number }>();
 app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
-  const key = `${req.baseUrl}:${req.ip || 'local'}`;
+  const guestJoin = req.baseUrl === '/api/auth' && req.path === '/guest';
+  const key = `${guestJoin ? '/api/auth/guest' : req.baseUrl}:${req.ip || 'local'}`;
   const now = Date.now();
   let r = limitMap.get(key);
   if (!r || r.until < now) {
@@ -88,7 +91,7 @@ app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
     limitMap.set(key, r);
   }
   // A class may share one school IP; opening an invitation is less sensitive than login.
-  const limit = req.baseUrl === '/api/invitations' ? 120 : 40;
+  const limit = guestJoin ? 300 : req.baseUrl === '/api/invitations' ? 120 : 40;
   if (++r.n > limit) {
     res.status(429).json({ error: 'Слишком много попыток. Подождите 10 минут.' });
     return;
@@ -97,6 +100,7 @@ app.use(['/api/auth', '/api/invitations'], (req, res, next) => {
   next();
 });
 app.use('/api/auth', recoveryRouter());
+app.use('/api', guestRouter());
 // Public seasons hidden by complaints leave the shared feed but stay with assigned classes.
 const visibilitySql =
   "((s.visibility='public' AND NOT s.hidden) OR s.owner_id=$1 OR EXISTS(SELECT 1 FROM assignments av JOIN memberships mv ON mv.class_id=av.class_id WHERE av.season_id=s.id AND mv.user_id=$1))";
@@ -1107,6 +1111,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 await db.query('SELECT 1');
 await db.query('DELETE FROM sessions WHERE expires_at<now()');
+await purgeGuests();
+setInterval(
+  () => void purgeGuests().catch((e) => console.error('Guest cleanup failed:', e)),
+  6 * 3600000,
+).unref();
 const stopRenderWorker = startRenderWorker(db, renderSeason);
 const server = app.listen(Number(process.env.PORT) || 3100, '0.0.0.0', (error?: Error) => {
   if (error) {

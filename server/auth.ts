@@ -11,6 +11,8 @@ export type User = {
   language: 'ru' | 'kk';
   trust_level: 'new' | 'trusted';
   is_moderator: boolean;
+  is_guest?: boolean;
+  last_seen_at?: string;
 };
 declare global {
   namespace Express {
@@ -86,7 +88,7 @@ export async function auth(req: Request, res: Response, next: NextFunction) {
   const token = cookieToken(req);
   if (token && /^[a-f0-9]{64}$/.test(token)) {
     req.user = await one<User>(
-      'SELECT u.id,u.name,u.email,u.role,u.grade,u.language,u.trust_level,u.is_moderator FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=$1 AND expires_at>now()',
+      'SELECT u.id,u.name,u.email,u.role,u.grade,u.language,u.trust_level,u.is_moderator,u.is_guest,u.last_seen_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=$1 AND expires_at>now()',
       [tokenHash(token)],
     );
   }

@@ -3919,3 +3919,20 @@ td .muted {
     font-size: 9px;
   }
 }
+.guest-join {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.guest-join label {
+  font-weight: 650;
+}
+.guest-join input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: inherit;
+  font-size: 17px;
+}

@@ -256,3 +256,65 @@ test('empty class screen shows zeros', async ({ browser }) => {
   });
   expect(results.students).toEqual([]);
 });
+
+async function guest(browser: Browser, code: string, name: string) {
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:3100' });
+  contexts.push(context);
+  const r = await context.request.post('/api/auth/guest', { data: { code, name } });
+  expect(r.ok(), await r.text()).toBe(true);
+  const me = (await (await context.request.get('/api/me')).json()).user;
+  users.push(me.id);
+  return { id: me.id as string, context, me };
+}
+
+test('guest joins a class by code and name and can place a bet', async ({ browser }) => {
+  const { c, run } = await hookClass(browser, []);
+  const g = await guest(browser, c.code, 'Айгерим');
+  expect(g.me.role).toBe('student');
+  expect(g.me.name).toBe('Айгерим');
+  const runs = await get(g, '/hook-runs');
+  expect(runs.map((r: { id: string }) => r.id)).toEqual([run.id]);
+  await post(g, `/hook-runs/${run.id}/guess`, { phase: 'before', answer: 1, confidence: 2 });
+  const bad = await g.context.request.post('/api/auth/guest', {
+    data: { code: 'NOPE0000', name: 'Кто-то' },
+  });
+  expect(bad.status()).toBe(404);
+});
+
+test('stale guests are purged with their guesses', async ({ browser }) => {
+  const { c, run, students } = await hookClass(browser, ['Обычный ученик']);
+  const g = await guest(browser, c.code, 'Старый гость');
+  await post(g, `/hook-runs/${run.id}/guess`, { phase: 'before', answer: 0, confidence: 2 });
+  await db.query("UPDATE users SET last_seen_at=now()-interval '61 days' WHERE id=ANY($1)", [
+    [g.id, students[0].id],
+  ]);
+  const { purgeGuests } = await import('../server/guests');
+  expect(await purgeGuests()).toBeGreaterThanOrEqual(1);
+  expect((await db.query('SELECT id FROM users WHERE id=$1', [g.id])).rowCount).toBe(0);
+  expect((await db.query('SELECT 1 FROM hook_guesses WHERE user_id=$1', [g.id])).rowCount).toBe(0);
+  expect((await db.query('SELECT id FROM users WHERE id=$1', [students[0].id])).rowCount).toBe(1);
+});
+
+test('thirty guests from one address can join', async ({ browser }) => {
+  const { c } = await hookClass(browser, []);
+  for (let i = 0; i < 30; i++) await guest(browser, c.code, `Гость ${i + 1}`);
+  const n = await db.query('SELECT count(*)::int n FROM memberships WHERE class_id=$1', [c.id]);
+  expect(n.rows[0].n).toBe(30);
+});
+
+test('guest joins from the invitation page with only a name', async ({ browser }) => {
+  const { c } = await hookClass(browser, []);
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:3100',
+    viewport: { width: 390, height: 844 },
+  });
+  contexts.push(context);
+  const page = await context.newPage();
+  await page.goto(`/join/${c.code}`);
+  await page.getByLabel('Твоё имя').fill('Айгерим');
+  await page.getByRole('button', { name: 'Войти по имени' }).click();
+  await expect(page).toHaveURL(/\/assignments$/);
+  const me = (await (await context.request.get('/api/me')).json()).user;
+  users.push(me.id);
+  expect(me.name).toBe('Айгерим');
+});
