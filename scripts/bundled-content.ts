@@ -124,7 +124,19 @@ async function upsertHooks(c: pg.PoolClient, ownerId: string) {
         subject=EXCLUDED.subject,language=EXCLUDED.language,grade=EXCLUDED.grade,
         source_text=EXCLUDED.source_text,status='published',visibility='public',
         topic_id=EXCLUDED.topic_id,kind='hook',updated_at=now()`,
-      [item.id, ownerId, h.title, h.description, h.subject, h.language, h.grade, color, art, h.episode.script, h.topic_id],
+      [
+        item.id,
+        ownerId,
+        h.title,
+        h.description,
+        h.subject,
+        h.language,
+        h.grade,
+        color,
+        art,
+        h.episode.script,
+        h.topic_id,
+      ],
     );
     const episode = (
       await c.query(
@@ -141,7 +153,15 @@ async function upsertHooks(c: pg.PoolClient, ownerId: string) {
       VALUES($1,$2,0,$3,$4,$5,$6,$7,'hook') ON CONFLICT(season_id,position) DO UPDATE SET
         prompt=EXCLUDED.prompt,options=EXCLUDED.options,correct=EXCLUDED.correct,
         explanation=EXCLUDED.explanation,episode_id=EXCLUDED.episode_id,purpose='hook'`,
-      [randomUUID(), item.id, q.prompt, JSON.stringify(q.options), q.correct, q.explanation, episode.id],
+      [
+        randomUUID(),
+        item.id,
+        q.prompt,
+        JSON.stringify(q.options),
+        q.correct,
+        q.explanation,
+        episode.id,
+      ],
     );
   }
 }

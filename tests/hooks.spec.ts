@@ -388,7 +388,9 @@ test('class screen updates answers live and reveals on click', async ({ browser 
   await expect(page.locator('body')).not.toContainText('Жансая');
 });
 
-test('student bets before the lesson and sees the answer only after reveal', async ({ browser }) => {
+test('student bets before the lesson and sees the answer only after reveal', async ({
+  browser,
+}) => {
   const { t, students, run } = await hookClass(browser, ['Асель']);
   const page = await students[0].context.newPage();
   await page.setViewportSize({ width: 390, height: 844 });

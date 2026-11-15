@@ -92,9 +92,7 @@ test('curation removes only stock templates, keeps real-video progress and assig
   expect(first.removedSeasons.sort()).toEqual(legacyIds.slice(0, 3).sort());
   expect(
     (await db.query('SELECT id FROM seasons ORDER BY id')).rows.map((x) => x.id).sort(),
-  ).toEqual(
-    [...legacyIds.slice(3), khanateId, princeId, ...bundledHooks.map((h) => h.id)].sort(),
-  );
+  ).toEqual([...legacyIds.slice(3), khanateId, princeId, ...bundledHooks.map((h) => h.id)].sort());
   expect(
     (await db.query('SELECT id FROM episodes WHERE season_id=$1', [khanateId])).rows[0].id,
   ).toBe(episode);

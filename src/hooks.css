@@ -140,7 +140,8 @@
   display: flex;
   flex-direction: column;
   padding: clamp(16px, 2.2vw, 40px);
-  background: radial-gradient(circle at 15% 0%, rgba(193, 241, 125, 0.08), transparent 45%), #0b100a;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(193, 241, 125, 0.08), transparent 45%), #0b100a;
   color: #f2f6ee;
 }
 .screen-top {
@@ -216,7 +217,10 @@
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
   font-size: clamp(20px, 1.8vw, 40px);
-  transition: opacity 0.4s, border-color 0.4s, background 0.4s;
+  transition:
+    opacity 0.4s,
+    border-color 0.4s,
+    background 0.4s;
 }
 .screen-option.correct {
   border-color: var(--mint);

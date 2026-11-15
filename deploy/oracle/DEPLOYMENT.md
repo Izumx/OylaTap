@@ -57,7 +57,10 @@ docker image tag oylatap:oracle-local oylatap:before-update
 docker compose --env-file deploy/oracle/.env -f deploy/oracle/compose.yaml stop web
 docker compose --env-file deploy/oracle/.env -f deploy/oracle/compose.yaml build --pull web
 docker compose --env-file deploy/oracle/.env -f deploy/oracle/compose.yaml run --rm --no-deps -T web npm run db:migrate
+docker compose --env-file deploy/oracle/.env -f deploy/oracle/compose.yaml run --rm --no-deps -T web npm run content:sync
 docker compose --env-file deploy/oracle/.env -f deploy/oracle/compose.yaml up -d --wait web
 ```
 
-After any update, verify HTTPS, sign-in, a private video, and a render job. Password recovery remains disabled until SMTP and actual delivery are configured. Physical phone and microphone checks are still required for wider rollout.
+`content:sync` upserts the bundled videos and the six lesson hooks (`content/hooks`) with stable ids; it is safe to repeat and never reseeds accounts. It needs an existing content owner: the owner of the Khanate season, or `CONTENT_OWNER_ID`.
+
+After any update, verify HTTPS, sign-in, a private video, a render job, and for lesson hooks: launch one from a class card, open the class screen, join as a guest by QR, place a bet, show votes and reveal. Password recovery remains disabled until SMTP and actual delivery are configured. Physical phone and microphone checks are still required for wider rollout.

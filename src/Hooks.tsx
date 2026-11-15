@@ -65,7 +65,15 @@ export function lessonTime(iso: string, locale: string) {
   });
 }
 
-export function LaunchHookModal({ classId, onClose, onLaunched }: { classId: string; onClose: () => void; onLaunched: () => void }) {
+export function LaunchHookModal({
+  classId,
+  onClose,
+  onLaunched,
+}: {
+  classId: string;
+  onClose: () => void;
+  onLaunched: () => void;
+}) {
   const { t, locale, notify } = useApp();
   const hooks = useResource<HookSummary[]>('/hooks');
   const [chosen, setChosen] = useState(''),
@@ -111,18 +119,25 @@ export function LaunchHookModal({ classId, onClose, onLaunched }: { classId: str
               aria-pressed={chosen === h.id}
               onClick={() => setChosen(h.id)}
             >
-              <span className="hook-pick-check">{chosen === h.id ? <Check size={16} /> : <Sparkles size={16} />}</span>
+              <span className="hook-pick-check">
+                {chosen === h.id ? <Check size={16} /> : <Sparkles size={16} />}
+              </span>
               <span>
                 <b>{h.title}</b>
                 <small>
-                  {(subjects[h.subject]?.[locale === 'kk' ? 1 : 0] || h.subject) + ` · ${h.grade} ${t('класс', 'сынып')}`}
-                  {h.topic_title_ru ? ` · ${locale === 'kk' ? h.topic_title_kk || h.topic_title_ru : h.topic_title_ru}` : ''}
+                  {(subjects[h.subject]?.[locale === 'kk' ? 1 : 0] || h.subject) +
+                    ` · ${h.grade} ${t('класс', 'сынып')}`}
+                  {h.topic_title_ru
+                    ? ` · ${locale === 'kk' ? h.topic_title_kk || h.topic_title_ru : h.topic_title_ru}`
+                    : ''}
                   {` · ${h.duration} ${t('с', 'с')}`}
                 </small>
               </span>
             </button>
           ))}
-          {!hooks.data?.length && <p className="muted">{t('Загадок пока нет', 'Әзірге жұмбақ жоқ')}</p>}
+          {!hooks.data?.length && (
+            <p className="muted">{t('Загадок пока нет', 'Әзірге жұмбақ жоқ')}</p>
+          )}
         </div>
       </State>
       <div className="hook-when">
@@ -162,7 +177,8 @@ export function HookRunsList({ classId }: { classId: string }) {
           <div>
             <b>{r.title}</b>
             <small>
-              <Clock3 size={13} /> {lessonTime(r.lesson_at, locale)} · {t('ответили', 'жауап берді')} {r.answered}/{r.students}
+              <Clock3 size={13} /> {lessonTime(r.lesson_at, locale)} ·{' '}
+              {t('ответили', 'жауап берді')} {r.answered}/{r.students}
               {r.revealed_at ? ` · ${t('раскрыто', 'ашылды')}` : ''}
             </small>
           </div>
@@ -193,7 +209,9 @@ export function HookResultsPage() {
   const { classId = '', runId = '' } = useParams();
   const { t } = useApp();
   const r = useResource<Results>(`/hook-runs/${runId}/results`);
-  const screen = useResource<{ prompt: string; options: string[]; correct: number | null }>(`/hook-runs/${runId}/screen`);
+  const screen = useResource<{ prompt: string; options: string[]; correct: number | null }>(
+    `/hook-runs/${runId}/screen`,
+  );
   const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
   const optionLabel = (i: number | null) => (i == null ? '—' : 'АБВГ'[i] || String(i + 1));
   return (
@@ -202,7 +220,10 @@ export function HookResultsPage() {
         <ArrowLeft size={17} />
         {t('Классы', 'Сыныптар')}
       </Link>
-      <PageHeader eyebrow={t('ИТОГИ ЗАГАДКИ', 'ЖҰМБАҚ ҚОРЫТЫНДЫСЫ')} title={screen.data?.prompt || t('Загадка к уроку', 'Сабаққа жұмбақ')} />
+      <PageHeader
+        eyebrow={t('ИТОГИ ЗАГАДКИ', 'ЖҰМБАҚ ҚОРЫТЫНДЫСЫ')}
+        title={screen.data?.prompt || t('Загадка к уроку', 'Сабаққа жұмбақ')}
+      />
       <State {...r} retry={r.reload}>
         {r.data && (
           <>
@@ -210,7 +231,8 @@ export function HookResultsPage() {
               <div className="panel">
                 <UsersRound size={20} />
                 <b>
-                  {t('Ответили', 'Жауап берді')} {r.data.summary.answered} {t('из', '/')} {r.data.summary.students}
+                  {t('Ответили', 'Жауап берді')} {r.data.summary.answered} {t('из', '/')}{' '}
+                  {r.data.summary.students}
                 </b>
                 <small>
                   {t('посмотрели', 'көрді')} {r.data.summary.watched}
@@ -221,7 +243,11 @@ export function HookResultsPage() {
                 <small>{t('угадали до урока', 'сабаққа дейін тапты')}</small>
               </div>
               <div className="panel">
-                <b>{r.data.summary.recheck_answered ? `${pct(r.data.summary.recheck_correct, r.data.summary.recheck_answered)}%` : '—'}</b>
+                <b>
+                  {r.data.summary.recheck_answered
+                    ? `${pct(r.data.summary.recheck_correct, r.data.summary.recheck_answered)}%`
+                    : '—'}
+                </b>
                 <small>{t('запомнили через 3 дня', '3 күннен кейін есте сақтады')}</small>
               </div>
             </div>
@@ -244,7 +270,11 @@ export function HookResultsPage() {
                   </span>
                 </div>
               ))}
-              {!r.data.students.length && <p className="muted">{t('В классе пока нет учеников', 'Сыныпта әзірге оқушы жоқ')}</p>}
+              {!r.data.students.length && (
+                <p className="muted">
+                  {t('В классе пока нет учеников', 'Сыныпта әзірге оқушы жоқ')}
+                </p>
+              )}
             </div>
             <Link className="button secondary" to={`/classes/${classId}/hooks/${runId}/screen`}>
               <MonitorPlay size={16} />
@@ -276,7 +306,11 @@ function JoinQr({ code }: { code: string }) {
   const url = `${window.location.origin}/join/${code}`;
   useEffect(() => {
     if (ref.current)
-      void QRCode.toCanvas(ref.current, url, { width: 168, margin: 1, color: { dark: '#0d130c', light: '#ffffff' } });
+      void QRCode.toCanvas(ref.current, url, {
+        width: 168,
+        margin: 1,
+        color: { dark: '#0d130c', light: '#ffffff' },
+      });
   }, [url]);
   return <canvas ref={ref} aria-label={`QR: ${url}`} role="img" />;
 }
@@ -308,7 +342,12 @@ export function ClassScreenPage() {
     };
   }, [runId]);
   async function act(path: 'show-votes' | 'reveal' | 'restart') {
-    if (path === 'restart' && !window.confirm(t('Стереть все ставки и начать заново?', 'Барлық болжамды өшіріп, қайта бастау керек пе?')))
+    if (
+      path === 'restart' &&
+      !window.confirm(
+        t('Стереть все ставки и начать заново?', 'Барлық болжамды өшіріп, қайта бастау керек пе?'),
+      )
+    )
       return;
     setBusy(true);
     try {
@@ -356,7 +395,10 @@ export function ClassScreenPage() {
           </div>
           <ol className="screen-options">
             {s.options.map((o, i) => (
-              <li key={i} className={`screen-option ${s.correct === i ? 'correct' : ''} ${s.revealed && s.correct !== i ? 'dim' : ''}`}>
+              <li
+                key={i}
+                className={`screen-option ${s.correct === i ? 'correct' : ''} ${s.revealed && s.correct !== i ? 'dim' : ''}`}
+              >
                 <span className="screen-letter">{'АБВГ'[i] || i + 1}</span>
                 <span className="screen-text">{o}</span>
                 {s.votes && (
@@ -389,7 +431,11 @@ export function ClassScreenPage() {
             <b>{s.join_code}</b>
             <small>{window.location.host}/join</small>
           </div>
-          <button className={`button ${step === 'restart' ? 'secondary' : 'primary'} screen-action`} disabled={busy} onClick={() => void act(step)}>
+          <button
+            className={`button ${step === 'restart' ? 'secondary' : 'primary'} screen-action`}
+            disabled={busy}
+            onClick={() => void act(step)}
+          >
             {step === 'show-votes' && t('Показать голоса', 'Дауыстарды көрсету')}
             {step === 'reveal' && t('Раскрыть ответ', 'Жауапты ашу')}
             {step === 'restart' && t('Начать заново', 'Қайта бастау')}
@@ -626,7 +672,10 @@ export function HookCard({
           </p>
           {run.explanation && <p className="hook-explanation">{run.explanation}</p>}
           {run.votes && (
-            <ul className="hook-split" aria-label={t('Как ответил класс', 'Сынып қалай жауап берді')}>
+            <ul
+              className="hook-split"
+              aria-label={t('Как ответил класс', 'Сынып қалай жауап берді')}
+            >
               {run.options.map((o, i) => (
                 <li key={i} className={i === run.correct ? 'correct' : ''}>
                   <span>{o}</span>
