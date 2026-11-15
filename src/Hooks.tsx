@@ -578,7 +578,7 @@ function HookVideo({ episodeId }: { episodeId: string }) {
     <video
       className="hook-video"
       src={`/api/episodes/${episodeId}/video`}
-      poster={`/api/episodes/${episodeId}/poster`}
+      poster={`/api/episodes/${episodeId}/poster?t=4`}
       controls
       playsInline
       preload="metadata"

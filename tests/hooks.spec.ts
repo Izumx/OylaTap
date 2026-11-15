@@ -398,6 +398,7 @@ test('student bets before the lesson and sees the answer only after reveal', asy
   const card = page.locator('.hook-card');
   await expect(card).toContainText('Что не даёт мосту упасть?');
   await expect(card.locator('video')).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await card.getByRole('radio', { name: 'Силы уравновешены' }).check();
   await card.getByRole('radio', { name: 'уверен' }).check();
   await card.getByLabel('Почему? (необязательно)').fill('Тянут в разные стороны');
@@ -466,4 +467,20 @@ test('hook seasons stay out of the studio and cannot be assigned as lessons', as
     (await db.query('SELECT count(*)::int n FROM assignments WHERE season_id=$1', [hook.id]))
       .rows[0].n,
   ).toBe(0);
+});
+
+test('hook card poster skips the dark intro of the episode', async ({ browser }) => {
+  const t = await actor(browser, 'Постер', 'teacher');
+  const ids = bundledHooks.map((h) => h.id);
+  if (!(await db.query('SELECT id FROM seasons WHERE id=ANY($1)', [ids])).rowCount)
+    seasons.push(...ids);
+  await syncBundledHooks(db, t.id);
+  const ep = (await db.query('SELECT id FROM episodes WHERE season_id=$1', [ids[0]])).rows[0].id;
+  const first = await t.context.request.get(`/api/episodes/${ep}/poster`);
+  const later = await t.context.request.get(`/api/episodes/${ep}/poster?t=4`);
+  expect(later.status()).toBe(200);
+  expect(later.headers()['content-type']).toContain('image/jpeg');
+  // A black intro frame compresses to a tiny JPEG; the bridge scene does not.
+  expect((await later.body()).length).toBeGreaterThan((await first.body()).length * 2);
+  expect((await t.context.request.get(`/api/episodes/${ep}/poster?t=99`)).status()).toBe(400);
 });

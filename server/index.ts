@@ -371,8 +371,14 @@ app.get(['/api/episodes/:id/video', '/api/episodes/:id/poster'], async (req, res
   if (!ep || !ep.media_path) notFound();
   // The same permission check runs even when this image has already been cached.
   if (req.path.endsWith('/poster')) {
+    const at = z.coerce
+      .number()
+      .min(0)
+      .max(30)
+      .default(0)
+      .parse(req.query.t ?? 0);
     try {
-      res.type('image/jpeg').send(await videoPoster(ep.media_path));
+      res.type('image/jpeg').send(await videoPoster(ep.media_path, at));
     } catch {
       res.status(404).json({ error: 'Обложка недоступна' });
     }
