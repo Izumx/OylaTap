@@ -19,6 +19,7 @@ type Candidate = {
   language: string;
   grade: number;
   owner_id: string;
+  kind: 'lesson' | 'hook';
   published_at: string | null;
   topic_title_ru: string | null;
   topic_title_kk: string | null;
@@ -39,10 +40,10 @@ export function recommendRouter(visibilitySql: string) {
     const exclude = new Set(q.exclude || []);
     const week = schoolWeek();
     const candidates = await rows<Candidate>(
-      `SELECT s.id,s.title,s.subject,s.language,s.grade,s.owner_id,s.published_at,
+      `SELECT s.id,s.title,s.subject,s.language,s.grade,s.owner_id,s.kind,s.published_at,
        t.title_ru topic_title_ru,t.title_kk topic_title_kk,t.grade topic_grade,t.week_from,t.week_to
        FROM seasons s LEFT JOIN curriculum_topics t ON t.id=s.topic_id
-       WHERE s.status='published' AND s.kind='lesson' AND ${visibilitySql}
+       WHERE s.status='published' AND s.kind IN ('lesson','hook') AND ${visibilitySql}
        AND EXISTS(SELECT 1 FROM episodes e WHERE e.season_id=s.id AND e.media_path IS NOT NULL)
        ORDER BY s.published_at DESC NULLS LAST LIMIT 300`,
       [userId],
@@ -78,7 +79,8 @@ export function recommendRouter(visibilitySql: string) {
     const kk = language === 'kk';
     const scored = candidates.map((c) => {
       const own = episodes.filter((e) => e.season_id === c.id);
-      const pending = own.filter((e) => !(e.watched && e.passed));
+      // A hook has no test: watching it to the end is enough.
+      const pending = own.filter((e) => !(e.watched && (e.passed || c.kind === 'hook')));
       const started = own.some((e) => e.watched);
       const reasons: [number, string][] = [];
       const add = (points: number, reason?: string) => reasons.push([points, reason || '']);

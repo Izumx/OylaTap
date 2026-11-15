@@ -11,6 +11,7 @@ import hook3 from '../content/hooks/history-khanate/hook.json' with { type: 'jso
 import hook4 from '../content/hooks/biology-leaf/hook.json' with { type: 'json' };
 import hook5 from '../content/hooks/geography-climate/hook.json' with { type: 'json' };
 import hook6 from '../content/hooks/literature-abai/hook.json' with { type: 'json' };
+import hook7 from '../content/hooks/survival-physics/hook.json' with { type: 'json' };
 
 export const khanateId = 'f9285ed2-b8cf-419e-83e8-c6844a65f74a';
 export const princeId = 'a260b7a9-8f7c-4e8c-bd87-38f8d1ee0d20';
@@ -96,6 +97,7 @@ export const bundledHooks = (
     ['biology-leaf', hook4, 33],
     ['geography-climate', hook5, 35],
     ['literature-abai', hook6, 35],
+    ['survival-physics', hook7, 74],
   ] as const
 ).map(([slug, raw, duration], i) => ({
   id: `30000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,

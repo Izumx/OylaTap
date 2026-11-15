@@ -91,17 +91,30 @@ async function hookSeason(ownerId: string, title = 'Почему мост не �
   return { id, episode };
 }
 
-test('published hook seasons stay out of catalog, today plan and recommendations', async ({
+test('published hook seasons stay out of catalog and today plan but reach the for-you feed', async ({
   browser,
 }) => {
   const t = await actor(browser, 'Учитель', 'teacher');
   const s = await actor(browser, 'Ученик');
   const hook = await hookSeason(t.id);
-  for (const path of ['/catalog', '/today', '/foryou']) {
+  for (const path of ['/catalog', '/today']) {
     const body = JSON.stringify(await get(s, path));
     expect(body.includes(hook.id), path).toBe(false);
   }
+  expect(await feedFind(s, hook.id)).toBe(true);
 });
+
+/** Pages through the endless for-you feed until the season shows up or the feed runs out. */
+async function feedFind(a: Actor, seasonId: string) {
+  const exclude: string[] = [];
+  for (let i = 0; i < 40; i++) {
+    const page = await post(a, '/foryou', { exclude });
+    if (page.items.some((x: { season_id: string }) => x.season_id === seasonId)) return true;
+    if (page.exhausted || !page.items.length) return false;
+    exclude.push(...page.items.map((x: { episode_id: string }) => x.episode_id));
+  }
+  return false;
+}
 
 async function post(a: Actor, path: string, data: unknown = {}) {
   const r = await a.context.request.post('/api' + path, { data });
@@ -434,10 +447,11 @@ test('bundled hooks appear in the launch picker with their topics', async ({ bro
     [ids],
   );
   expect(after.rows).toEqual(before.rows);
-  expect(after.rowCount).toBe(6);
+  expect(after.rowCount).toBe(bundledHooks.length);
   const hooks = (await get(t, '/hooks')).filter((h: { id: string }) => ids.includes(h.id));
-  expect(hooks).toHaveLength(6);
-  const physics = hooks.find((h: { subject: string }) => h.subject === 'physics');
+  expect(hooks).toHaveLength(bundledHooks.length);
+  expect(bundledHooks.length).toBe(7);
+  const physics = hooks.find((h: { title: string }) => h.title === 'Почему мост не падает?');
   expect(physics.topic_title_ru).toBe('Взаимодействие тел. Сила');
   expect(physics.title).toBe('Почему мост не падает?');
   for (const h of hooks) {
@@ -523,4 +537,16 @@ test('anyone can try public hooks without an account; the answer comes only on r
   await expect(card).toContainText('Ты угадал');
   await expect(card).toContainText('Силы уравновешены.');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('a hook in the feed leads to the bet instead of a test', async ({ browser }) => {
+  const t = await actor(browser, 'Автор ленты', 'teacher');
+  const hook = await hookSeason(t.id, 'Загадка в ленте');
+  const page = await t.context.newPage();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/watch/${hook.id}`);
+  await expect(page.getByRole('button', { name: 'Проверить себя' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Сделай ставку' }).click();
+  await expect(page).toHaveURL(new RegExp(`/try#hook-${hook.id}$`));
+  await expect(page.locator(`#hook-${hook.id}`)).toBeVisible();
 });
