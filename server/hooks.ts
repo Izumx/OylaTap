@@ -134,6 +134,32 @@ const conflict = (message: string) => Object.assign(new Error(message), { status
 export function hooksRouter(visibilitySql: string) {
   const router = Router();
 
+  // Public demo: anyone can watch a published public hook and bet locally; the answer comes from a separate reveal.
+  const publicHook =
+    "s.kind='hook' AND s.status='published' AND s.visibility='public' AND NOT s.hidden";
+  router.get('/demo/hooks', async (_req, res) => {
+    res.json(
+      await rows(
+        `SELECT s.id,s.title,s.subject,s.grade,e.id episode_id,e.duration,q.prompt,q.options
+        FROM seasons s JOIN episodes e ON e.season_id=s.id AND e.position=0
+        JOIN questions q ON q.season_id=s.id AND q.purpose='hook'
+        WHERE ${publicHook} ORDER BY s.id`,
+      ),
+    );
+  });
+  router.post('/demo/hooks/:id/reveal', async (req, res) => {
+    const h = await one(
+      `SELECT q.correct,q.explanation FROM seasons s JOIN questions q ON q.season_id=s.id AND q.purpose='hook'
+       WHERE s.id=$1 AND ${publicHook}`,
+      [uid.parse(req.params.id)],
+    );
+    if (!h) {
+      res.status(404).json({ error: 'Загадка не найдена' });
+      return;
+    }
+    res.json({ correct: h.correct, explanation: h.explanation });
+  });
+
   router.get('/hooks', required, author, async (req, res) => {
     const q = z
       .object({
