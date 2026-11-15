@@ -288,7 +288,7 @@ app.post('/api/authors/:id/follow', required, async (req, res) => {
 });
 app.get('/api/my-seasons', required, author, async (req, res) =>
   res.json(
-    await rows(catalogSql + ' WHERE s.owner_id=$2 ORDER BY s.created_at DESC', [
+    await rows(catalogSql + " WHERE s.owner_id=$2 AND s.kind='lesson' ORDER BY s.created_at DESC", [
       req.user!.id,
       req.user!.id,
     ]),
@@ -513,7 +513,7 @@ app.post('/api/assignments', required, teacher, async (req, res) => {
     notFound();
   if (
     !(await one(
-      "SELECT id FROM seasons WHERE id=$1 AND status='published' AND ((visibility='public' AND NOT hidden) OR owner_id=$2)",
+      "SELECT id FROM seasons WHERE id=$1 AND status='published' AND kind='lesson' AND ((visibility='public' AND NOT hidden) OR owner_id=$2)",
       [d.season_id, req.user!.id],
     ))
   )
@@ -581,7 +581,8 @@ const seasonData = z
       });
   });
 async function owned(req: express.Request) {
-  const s = await one('SELECT * FROM seasons WHERE id=$1 AND owner_id=$2', [
+  // Lesson hooks are bundled content with their own flow; the studio never edits them.
+  const s = await one("SELECT * FROM seasons WHERE id=$1 AND owner_id=$2 AND kind='lesson'", [
     uid.parse(req.params.id),
     req.user!.id,
   ]);

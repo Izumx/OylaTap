@@ -444,3 +444,26 @@ test('bundled hooks appear in the launch picker with their topics', async ({ bro
     expect(r.status(), h.title).toBe(200);
   }
 });
+
+test('hook seasons stay out of the studio and cannot be assigned as lessons', async ({
+  browser,
+}) => {
+  const t = await actor(browser, 'Автор загадок', 'teacher');
+  const c = await post(t, '/classes', { name: '7 Г · Студия' });
+  const hook = await hookSeason(t.id, 'Загадка не для студии');
+  const mine = await get(t, '/my-seasons');
+  expect(mine.map((s: { id: string }) => s.id)).not.toContain(hook.id);
+  const put = await t.context.request.put(`/api/seasons/${hook.id}`, { data: {} });
+  expect(put.status()).toBe(404);
+  expect(
+    await status(t, 'post', '/assignments', {
+      class_id: c.id,
+      season_id: hook.id,
+      due_at: '2099-01-01T10:00:00Z',
+    }),
+  ).toBe(400);
+  expect(
+    (await db.query('SELECT count(*)::int n FROM assignments WHERE season_id=$1', [hook.id]))
+      .rows[0].n,
+  ).toBe(0);
+});
