@@ -14,7 +14,7 @@ import { StudioPage, EditorPage, ClassesPage } from './Teacher';
 import { ResultsPage } from './Results';
 import { StatsPage, ModerationPage } from './Creator';
 import { AuthorPage } from './Authors';
-import { HookResultsPage, ClassScreenPage } from './Hooks';
+import { HookResultsPage, ClassScreenPage, TryHooksPage } from './Hooks';
 import './style.css';
 import './comfort.css';
 import './reports.css';
@@ -51,6 +51,7 @@ function App() {
         <Route path="/learn/:id" element={<SeasonPage />} />
         <Route path="/author/:id" element={<AuthorPage />} />
         <Route path="/join/:code" element={<JoinClassPage />} />
+        <Route path="/try" element={<TryHooksPage />} />
         <Route path="/forgot-password" element={<RecoveryPage key="forgot" />} />
         <Route path="/reset-password" element={<RecoveryPage key="reset" />} />
         <Route

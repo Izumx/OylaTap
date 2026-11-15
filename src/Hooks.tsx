@@ -737,11 +737,153 @@ export function HookFeedNudge() {
   const { t, user } = useApp();
   const r = useResource<StudentHookRun[]>(user?.role === 'student' ? '/hook-runs' : null);
   const open = r.data?.find((x) => !x.revealed && !x.my_before);
-  if (!open) return null;
+  if (open)
+    return (
+      <Link className="hook-nudge" to="/assignments">
+        <Sparkles size={15} />
+        <span>{t('Загадка к уроку — сделай ставку', 'Сабаққа жұмбақ — болжам жаса')}</span>
+      </Link>
+    );
+  // Everyone else gets a way into the public demo.
   return (
-    <Link className="hook-nudge" to="/assignments">
+    <Link className="hook-nudge" to="/try">
       <Sparkles size={15} />
-      <span>{t('Загадка к уроку — сделай ставку', 'Сабаққа жұмбақ — болжам жаса')}</span>
+      <span>{t('Новое: Угадай до урока', 'Жаңа: Сабаққа дейін тап')}</span>
     </Link>
+  );
+}
+
+type DemoHook = {
+  id: string;
+  title: string;
+  subject: string;
+  grade: number;
+  episode_id: string;
+  duration: number;
+  prompt: string;
+  options: string[];
+};
+
+function DemoHookCard({ hook }: { hook: DemoHook }) {
+  const { t, locale } = useApp();
+  const [bet, setBet] = useState<{ answer: number; confidence: number } | null>(null),
+    [reveal, setReveal] = useState<{ correct: number; explanation: string } | null>(null),
+    [busy, setBusy] = useState(false);
+  return (
+    <article className="hook-card" data-hook={hook.id}>
+      <header>
+        <span className="hook-tag">
+          <Sparkles size={14} />
+          {t('Загадка к уроку', 'Сабаққа жұмбақ')}
+        </span>
+        <small>
+          {(subjects[hook.subject]?.[locale === 'kk' ? 1 : 0] || hook.subject) +
+            ` · ${hook.grade} ${t('класс', 'сынып')}`}
+        </small>
+      </header>
+      <h3>{hook.prompt}</h3>
+      {!bet && (
+        <>
+          <HookVideo episodeId={hook.episode_id} />
+          <BetForm
+            name={`demo-${hook.id}`}
+            options={hook.options}
+            withReason={false}
+            submitLabel={t('Поставить', 'Болжам жасау')}
+            onSubmit={async (v) => setBet(v)}
+          />
+        </>
+      )}
+      {bet && !reveal && (
+        <div className="hook-accepted">
+          <Check size={20} />
+          <div>
+            <b>
+              {t(
+                'Ставка принята. В классе ответ раскроет учитель',
+                'Болжам қабылданды. Сыныпта жауапты мұғалім ашады',
+              )}
+            </b>
+            <small>
+              {t('Твой вариант', 'Сенің нұсқаң')}: {hook.options[bet.answer]} ·{' '}
+              {t(...confidenceLabels[bet.confidence])}
+            </small>
+          </div>
+          <button
+            className="button primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                setReveal(await post(`/demo/hooks/${hook.id}/reveal`));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {t('Раскрыть ответ, как на уроке', 'Жауапты сабақтағыдай ашу')}
+          </button>
+        </div>
+      )}
+      {bet && reveal && (
+        <div className="hook-revealed">
+          <p className={`hook-verdict ${bet.answer === reveal.correct ? 'win' : ''}`}>
+            {bet.answer === reveal.correct
+              ? t('Ты угадал!', 'Таптың!')
+              : t('Не угадал — так бывает чаще всего', 'Таппадың — бұл жиі болады')}
+          </p>
+          <p className="hook-explanation">{reveal.explanation}</p>
+          <button
+            className="button secondary"
+            onClick={() => {
+              setBet(null);
+              setReveal(null);
+            }}
+          >
+            {t('Попробовать ещё раз', 'Қайта көру')}
+          </button>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** Public page: try the lesson hooks without an account. */
+export function TryHooksPage() {
+  const { t, user } = useApp();
+  const r = useResource<DemoHook[]>('/demo/hooks');
+  return (
+    <div className="page try-page">
+      <PageHeader
+        eyebrow={t('НОВОЕ · УГАДАЙ ДО УРОКА', 'ЖАҢА · САБАҚҚА ДЕЙІН ТАП')}
+        title={t('Попробуй загадку к уроку', 'Сабаққа жұмбақты көр')}
+        description={t(
+          'Посмотри серию на полминуты, сделай ставку и раскрой ответ. В классе ответ раскрывает учитель на уроке, а через 3 дня приходит повтор.',
+          'Жарты минуттық серияны көріп, болжам жаса да жауапты аш. Сыныпта жауапты мұғалім сабақта ашады, ал 3 күннен кейін қайталау келеді.',
+        )}
+      />
+      <div className="try-teacher">
+        <MonitorPlay size={20} />
+        <span>
+          {t(
+            'Учитель? Отправьте загадку своему классу и покажите голоса на экране класса.',
+            'Мұғалімсіз бе? Жұмбақты сыныбыңызға жіберіп, дауыстарды сынып экранында көрсетіңіз.',
+          )}
+        </span>
+        <Link className="button secondary" to="/classes">
+          {user ? t('К классам', 'Сыныптарға') : t('Войти как учитель', 'Мұғалім ретінде кіру')}
+        </Link>
+      </div>
+      <State {...r} retry={r.reload}>
+        <section className="hook-section try-list">
+          {r.data?.map((h) => (
+            <DemoHookCard key={h.id} hook={h} />
+          ))}
+          {!r.data?.length && (
+            <p className="muted">{t('Загадки скоро появятся', 'Жұмбақтар жақында шығады')}</p>
+          )}
+        </section>
+      </State>
+    </div>
   );
 }

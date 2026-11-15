@@ -484,3 +484,43 @@ test('hook card poster skips the dark intro of the episode', async ({ browser })
   expect((await later.body()).length).toBeGreaterThan((await first.body()).length * 2);
   expect((await t.context.request.get(`/api/episodes/${ep}/poster?t=99`)).status()).toBe(400);
 });
+
+test('anyone can try public hooks without an account; the answer comes only on reveal', async ({
+  browser,
+}) => {
+  const owner = await actor(browser, 'Автор демо', 'teacher');
+  const hook = await hookSeason(owner.id, 'Демо: почему мост не падает?');
+  const anon = await browser.newContext({ baseURL: 'http://127.0.0.1:3100' });
+  contexts.push(anon);
+  const list = await anon.request.get('/api/demo/hooks');
+  expect(list.status()).toBe(200);
+  const item = (await list.json()).find((h: { id: string }) => h.id === hook.id);
+  expect(item.prompt).toBe('Что не даёт мосту упасть?');
+  expect(item.options).toEqual(['Он тяжёлый', 'Силы уравновешены', 'Ветер']);
+  expect(item).not.toHaveProperty('correct');
+  expect(item).not.toHaveProperty('explanation');
+  const reveal = await anon.request.post(`/api/demo/hooks/${hook.id}/reveal`);
+  expect(await reveal.json()).toEqual({ correct: 1, explanation: 'Силы уравновешены.' });
+  const lesson = await db.query("SELECT id FROM seasons WHERE kind='lesson' LIMIT 1");
+  if (lesson.rowCount)
+    expect((await anon.request.post(`/api/demo/hooks/${lesson.rows[0].id}/reveal`)).status()).toBe(
+      404,
+    );
+
+  const page = await anon.newPage();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('link', { name: /Новое: Угадай до урока/ }).click();
+  await expect(page).toHaveURL(/\/try$/);
+  const card = page.locator(`.hook-card[data-hook="${hook.id}"]`);
+  await expect(card.locator('video')).toHaveCount(1);
+  await card.getByRole('radio', { name: 'Силы уравновешены' }).check();
+  await card.getByRole('radio', { name: 'уверен' }).check();
+  await card.getByRole('button', { name: 'Поставить' }).click();
+  await expect(card).toContainText('Ставка принята');
+  await expect(card).not.toContainText('Силы уравновешены.');
+  await card.getByRole('button', { name: 'Раскрыть ответ, как на уроке' }).click();
+  await expect(card).toContainText('Ты угадал');
+  await expect(card).toContainText('Силы уравновешены.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
