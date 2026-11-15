@@ -318,3 +318,47 @@ test('guest joins from the invitation page with only a name', async ({ browser }
   users.push(me.id);
   expect(me.name).toBe('Айгерим');
 });
+
+test('teacher launches a hook from the class card in under a minute', async ({ browser }) => {
+  const t = await actor(browser, 'Учитель', 'teacher');
+  const c = await post(t, '/classes', { name: '7 Б · Загадки' });
+  await hookSeason(t.id, 'Почему мост не падает? (UI)');
+  const page = await t.context.newPage();
+  await page.goto('/classes');
+  const card = page.locator('.class-card', { hasText: '7 Б · Загадки' });
+  await card.getByRole('button', { name: 'Загадка к уроку' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Загадка к уроку' });
+  await dialog.getByRole('button', { name: /Почему мост не падает\? \(UI\)/ }).click();
+  await dialog.getByLabel('Дата урока').fill('2099-03-02');
+  await dialog.getByLabel('Время урока').fill('10:20');
+  await dialog.getByRole('button', { name: 'Отправить классу' }).click();
+  await expect(dialog).toBeHidden();
+  const run = card.locator('.hook-run', { hasText: 'Почему мост не падает? (UI)' });
+  await expect(run).toBeVisible();
+  await expect(run.getByRole('link', { name: 'Экран класса' })).toBeVisible();
+  await expect(run.getByRole('link', { name: 'Итоги' })).toBeVisible();
+  const saved = await db.query('SELECT lesson_at FROM hook_runs WHERE class_id=$1', [c.id]);
+  expect(saved.rowCount).toBe(1);
+});
+
+test('teacher sees results with names, confidence and reasons', async ({ browser }) => {
+  const { t, students, c, run } = await hookClass(browser);
+  await post(students[0], `/hook-runs/${run.id}/guess`, {
+    phase: 'before',
+    answer: 1,
+    confidence: 3,
+    reason: 'Силы тянут и толкают',
+  });
+  await post(students[1], `/hook-runs/${run.id}/guess`, {
+    phase: 'before',
+    answer: 0,
+    confidence: 1,
+  });
+  const page = await t.context.newPage();
+  await page.goto(`/classes/${c.id}/hooks/${run.id}`);
+  await expect(page.getByText('Ответили 2 из 2')).toBeVisible();
+  const row = page.locator('.hook-result-row', { hasText: 'Айгерим' });
+  await expect(row).toContainText('уверен');
+  await expect(row).toContainText('Силы тянут и толкают');
+  await expect(page.locator('.hook-result-row', { hasText: 'Данияр' })).toContainText('наугад');
+});

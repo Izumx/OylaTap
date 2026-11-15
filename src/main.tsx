@@ -14,6 +14,7 @@ import { StudioPage, EditorPage, ClassesPage } from './Teacher';
 import { ResultsPage } from './Results';
 import { StatsPage, ModerationPage } from './Creator';
 import { AuthorPage } from './Authors';
+import { HookResultsPage } from './Hooks';
 import './style.css';
 import './comfort.css';
 import './reports.css';
@@ -21,6 +22,7 @@ import './polish.css';
 import './mobile.css';
 import './profile.css';
 import './authors.css';
+import './hooks.css';
 function App() {
   const loc = useLocation();
   return (
@@ -127,6 +129,14 @@ function App() {
           element={
             <Private teacher>
               <ClassesPage />
+            </Private>
+          }
+        />
+        <Route
+          path="/classes/:classId/hooks/:runId"
+          element={
+            <Private teacher>
+              <HookResultsPage />
             </Private>
           }
         />
