@@ -17,6 +17,9 @@ export type User = {
   is_moderator: boolean;
 };
 // Teachers and independent authors share the studio.
+/** Where a season opens: a lesson page, or the bet for a lesson hook. */
+export const seasonPath = (s: { id: string; kind?: string }) =>
+  s.kind === 'hook' ? `/try#hook-${s.id}` : `/learn/${s.id}`;
 export const isAuthor = (user: User | null) => user?.role === 'teacher' || user?.role === 'creator';
 export type ModerationFlag = {
   code: string;
@@ -69,6 +72,7 @@ export type DailySession = {
 };
 export type Season = {
   id: string;
+  kind?: 'lesson' | 'hook';
   title: string;
   description: string;
   subject: string;

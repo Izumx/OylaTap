@@ -49,6 +49,7 @@ import {
   type Season,
   type Episode,
   type DailySession,
+  seasonPath,
 } from './lib';
 import { Modal, State, PageHeader, SeasonArt, SeasonCard } from './components';
 import { StudentHooks, HookFeedNudge } from './Hooks';
@@ -835,7 +836,7 @@ export function Feed() {
                             {t('Закрепить тему: пройти тест', 'Тақырыпты бекіту: тест тапсыру')}
                           </button>
                         )}
-                        <Link className="text-button" to={`/learn/${current.season.id}`}>
+                        <Link className="text-button" to={seasonPath(current.season)}>
                           {t('Мой маршрут по теме', 'Тақырып бойынша жолым')}
                           <ArrowRight size={16} />
                         </Link>
@@ -905,15 +906,27 @@ export function Feed() {
                   </span>
                   <small>{t('Сезон', 'Маусым')}</small>
                 </button>
-                <button
-                  onClick={() => setModal('learn')}
-                  aria-label={t('Проверить себя', 'Өзіңді тексер')}
-                >
-                  <span className="action-mint">
-                    <CircleHelp size={27} />
-                  </span>
-                  <small>{t('Проверить себя', 'Өзіңді тексер')}</small>
-                </button>
+                {current?.season.kind === 'hook' ? (
+                  <button
+                    onClick={() => navigate(seasonPath(current.season))}
+                    aria-label={t('Сделай ставку', 'Болжам жаса')}
+                  >
+                    <span className="action-mint">
+                      <CircleHelp size={27} />
+                    </span>
+                    <small>{t('Сделай ставку', 'Болжам жаса')}</small>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setModal('learn')}
+                    aria-label={t('Проверить себя', 'Өзіңді тексер')}
+                  >
+                    <span className="action-mint">
+                      <CircleHelp size={27} />
+                    </span>
+                    <small>{t('Проверить себя', 'Өзіңді тексер')}</small>
+                  </button>
+                )}
                 <button
                   className="like-action"
                   onClick={() => current && void like(current)}
@@ -1436,8 +1449,11 @@ function FeedVideo({
         aria-label={clip.episode.title}
       />
       <div className="video-top">
-        <Link className="subject-badge" to={`/learn/${clip.season.id}`}>
-          <BookOpen size={12} /> {t('Открыть тему', 'Тақырыпты ашу')}
+        <Link className="subject-badge" to={seasonPath(clip.season)}>
+          <BookOpen size={12} />{' '}
+          {clip.season.kind === 'hook'
+            ? t('Сделай ставку', 'Болжам жаса')
+            : t('Открыть тему', 'Тақырыпты ашу')}
         </Link>
         <span className="episode-badge">
           {clip.episode.position + 1}/{clip.season.episodes!.length}
@@ -1544,7 +1560,7 @@ function FeedVideo({
             {clip.season.language === 'kk' ? 'Қазақша' : 'Русский'}
           </span>
         </div>
-        <Link to={`/learn/${clip.season.id}`} className="video-caption-link">
+        <Link to={seasonPath(clip.season)} className="video-caption-link">
           <span>{clip.season.title}</span>
           <ArrowRight size={15} />
         </Link>

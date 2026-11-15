@@ -770,7 +770,7 @@ function DemoHookCard({ hook }: { hook: DemoHook }) {
     [reveal, setReveal] = useState<{ correct: number; explanation: string } | null>(null),
     [busy, setBusy] = useState(false);
   return (
-    <article className="hook-card" data-hook={hook.id}>
+    <article className="hook-card" id={`hook-${hook.id}`} data-hook={hook.id}>
       <header>
         <span className="hook-tag">
           <Sparkles size={14} />
@@ -852,6 +852,11 @@ function DemoHookCard({ hook }: { hook: DemoHook }) {
 export function TryHooksPage() {
   const { t, user } = useApp();
   const r = useResource<DemoHook[]>('/demo/hooks');
+  // Coming from the feed: scroll to the hook the student was watching.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (r.data && id) document.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }, [r.data]);
   return (
     <div className="page try-page">
       <PageHeader
