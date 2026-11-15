@@ -120,6 +120,9 @@ export const subjects: Record<string, [string, string]> = {
   'world-literature': ['Мировая литература', 'Әлем әдебиеті'],
   algebra: ['Алгебра', 'Алгебра'],
   geometry: ['Геометрия', 'Геометрия'],
+  physics: ['Физика', 'Физика'],
+  biology: ['Биология', 'Биология'],
+  geography: ['География', 'География'],
 };
 export const videoStyles: Record<string, [string, string, string]> = {
   board: ['Доска', 'Тақта', 'Шаги появляются по очереди, формулы выделены. Для задач и решений.'],
