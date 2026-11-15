@@ -386,3 +386,30 @@ test('class screen updates answers live and reveals on click', async ({ browser 
   await expect(page.getByRole('button', { name: 'Начать заново' })).toBeVisible();
   await expect(page.locator('body')).not.toContainText('Жансая');
 });
+
+test('student bets before the lesson and sees the answer only after reveal', async ({ browser }) => {
+  const { t, students, run } = await hookClass(browser, ['Асель']);
+  const page = await students[0].context.newPage();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/assignments');
+  const card = page.locator('.hook-card');
+  await expect(card).toContainText('Что не даёт мосту упасть?');
+  await expect(card.locator('video')).toHaveCount(1);
+  await card.getByRole('radio', { name: 'Силы уравновешены' }).check();
+  await card.getByRole('radio', { name: 'уверен' }).check();
+  await card.getByLabel('Почему? (необязательно)').fill('Тянут в разные стороны');
+  await card.getByRole('button', { name: 'Поставить' }).click();
+  await expect(card).toContainText('Ставка принята. Ответ — на уроке');
+  await expect(page.locator('body')).not.toContainText('Силы уравновешены.');
+  const saved = await db.query(
+    "SELECT answer,confidence,reason FROM hook_guesses WHERE run_id=$1 AND phase='before'",
+    [run.id],
+  );
+  expect(saved.rows).toEqual([{ answer: 1, confidence: 3, reason: 'Тянут в разные стороны' }]);
+  await post(t, `/hook-runs/${run.id}/reveal`);
+  await page.reload();
+  await expect(card).toContainText('Ты угадал');
+  await expect(card).toContainText('Силы уравновешены.');
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width).toBeLessThanOrEqual(390);
+});

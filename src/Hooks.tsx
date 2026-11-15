@@ -399,3 +399,300 @@ export function ClassScreenPage() {
     </div>
   );
 }
+
+export type StudentHookRun = {
+  id: string;
+  class_name: string;
+  title: string;
+  subject: string;
+  episode_id: string;
+  prompt: string;
+  options: string[];
+  lesson_at: string;
+  answered: number;
+  students: number;
+  my_before: { answer: number; confidence: number; reason: string } | null;
+  revealed: boolean;
+  recheck_open: boolean;
+  my_recheck: { answer: number; confidence: number } | null;
+  correct?: number;
+  explanation?: string;
+  votes?: number[];
+  recheck_options?: string[];
+};
+
+function BetForm({
+  name,
+  options,
+  initial,
+  withReason,
+  submitLabel,
+  onSubmit,
+}: {
+  name: string;
+  options: string[];
+  initial?: { answer: number; confidence: number; reason?: string } | null;
+  withReason: boolean;
+  submitLabel: string;
+  onSubmit: (v: { answer: number; confidence: number; reason?: string }) => Promise<void>;
+}) {
+  const { t } = useApp();
+  const [answer, setAnswer] = useState<number | null>(initial?.answer ?? null),
+    [confidence, setConfidence] = useState(initial?.confidence ?? 2),
+    [reason, setReason] = useState(initial?.reason ?? ''),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  return (
+    <form
+      className="hook-bet"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (answer == null) {
+          setError(t('Выбери вариант', 'Нұсқаны таңда'));
+          return;
+        }
+        setBusy(true);
+        setError('');
+        try {
+          await onSubmit({ answer, confidence, ...(withReason ? { reason } : {}) });
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <fieldset className="hook-options">
+        <legend className="sr-only">{t('Варианты ответа', 'Жауап нұсқалары')}</legend>
+        {options.map((o, i) => (
+          <label key={i} className={answer === i ? 'chosen' : ''}>
+            <input
+              type="radio"
+              name={`${name}-answer`}
+              checked={answer === i}
+              onChange={() => setAnswer(i)}
+            />
+            <span className="hook-letter" aria-hidden="true">
+              {'АБВГ'[i] || i + 1}
+            </span>
+            <span>{o}</span>
+          </label>
+        ))}
+      </fieldset>
+      <fieldset className="hook-confidence">
+        <legend>{t('Насколько уверен?', 'Қаншалықты сенімдісің?')}</legend>
+        {[1, 2, 3].map((c) => (
+          <label key={c} className={confidence === c ? 'chosen' : ''}>
+            <input
+              type="radio"
+              name={`${name}-confidence`}
+              checked={confidence === c}
+              onChange={() => setConfidence(c)}
+            />
+            {c === 1
+              ? t('наугад', 'кездейсоқ')
+              : c === 2
+                ? t('думаю', 'ойлаймын')
+                : t('уверен', 'сенімдімін')}
+          </label>
+        ))}
+      </fieldset>
+      {withReason && (
+        <label className="form-label">
+          {t('Почему? (необязательно)', 'Неге? (міндетті емес)')}
+          <input
+            value={reason}
+            maxLength={140}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={t('Коротко, своими словами', 'Қысқаша, өз сөзіңмен')}
+          />
+        </label>
+      )}
+      {error && (
+        <p className="error-inline" role="alert">
+          {error}
+        </p>
+      )}
+      <button className="button primary full" disabled={busy}>
+        {submitLabel}
+      </button>
+    </form>
+  );
+}
+
+function HookVideo({ episodeId }: { episodeId: string }) {
+  const sent = useRef(0);
+  const report = (v: HTMLVideoElement, done = false) => {
+    const ratio = done ? 1 : v.duration ? Math.min(1, v.currentTime / v.duration) : 0;
+    if (!done && ratio - sent.current < 0.25) return;
+    sent.current = ratio;
+    void post(`/episodes/${episodeId}/view`, { ratio }).catch(() => {});
+  };
+  return (
+    <video
+      className="hook-video"
+      src={`/api/episodes/${episodeId}/video`}
+      poster={`/api/episodes/${episodeId}/poster`}
+      controls
+      playsInline
+      preload="metadata"
+      onTimeUpdate={(e) => report(e.currentTarget)}
+      onEnded={(e) => report(e.currentTarget, true)}
+    />
+  );
+}
+
+export function HookCard({
+  run,
+  onChange,
+}: {
+  run: StudentHookRun;
+  onChange: (r: StudentHookRun) => void;
+}) {
+  const { t, locale } = useApp();
+  const [editing, setEditing] = useState(false);
+  const bet = async (
+    phase: 'before' | 'recheck',
+    v: { answer: number; confidence: number; reason?: string },
+  ) => {
+    onChange(await post(`/hook-runs/${run.id}/guess`, { phase, ...v }));
+    setEditing(false);
+  };
+  const mine = run.my_before;
+  const votes = run.votes || [];
+  const total = votes.reduce((a, b) => a + b, 0);
+  const share = (i: number) => (total ? Math.round((100 * votes[i]) / total) : 0);
+  const recheckCorrect =
+    run.recheck_options && run.correct != null
+      ? run.recheck_options.indexOf(run.options[run.correct])
+      : -1;
+  const countLine = (
+    <>
+      {t('Уже ответили', 'Жауап берді')} {run.answered} {t('из', '/')} {run.students}
+    </>
+  );
+  return (
+    <article className="hook-card">
+      <header>
+        <span className="hook-tag">
+          <Sparkles size={14} />
+          {t('Загадка к уроку', 'Сабаққа жұмбақ')}
+        </span>
+        <small>
+          {run.class_name} · {t('урок', 'сабақ')} {lessonTime(run.lesson_at, locale)}
+        </small>
+      </header>
+      <h3>{run.prompt}</h3>
+      {!run.revealed && (!mine || editing) && (
+        <>
+          <HookVideo episodeId={run.episode_id} />
+          <BetForm
+            name={`bet-${run.id}`}
+            options={run.options}
+            initial={mine}
+            withReason
+            submitLabel={
+              mine ? t('Сохранить ставку', 'Болжамды сақтау') : t('Поставить', 'Болжам жасау')
+            }
+            onSubmit={(v) => bet('before', v)}
+          />
+          <p className="hook-count">{countLine}</p>
+        </>
+      )}
+      {!run.revealed && mine && !editing && (
+        <div className="hook-accepted">
+          <Check size={20} />
+          <div>
+            <b>{t('Ставка принята. Ответ — на уроке', 'Болжам қабылданды. Жауап — сабақта')}</b>
+            <small>
+              {t('Твой вариант', 'Сенің нұсқаң')}: {run.options[mine.answer]} ·{' '}
+              {t(...confidenceLabels[mine.confidence])}
+            </small>
+            <small>{countLine}</small>
+          </div>
+          <button className="button secondary" onClick={() => setEditing(true)}>
+            {t('Изменить', 'Өзгерту')}
+          </button>
+        </div>
+      )}
+      {run.revealed && (
+        <div className="hook-revealed">
+          <p className={`hook-verdict ${mine && mine.answer === run.correct ? 'win' : ''}`}>
+            {!mine
+              ? t('Ответ раскрыт на уроке', 'Жауап сабақта ашылды')
+              : mine.answer === run.correct
+                ? t('Ты угадал!', 'Таптың!')
+                : t('Не угадал — так бывает чаще всего', 'Таппадың — бұл жиі болады')}
+          </p>
+          {run.explanation && <p className="hook-explanation">{run.explanation}</p>}
+          {run.votes && (
+            <ul className="hook-split" aria-label={t('Как ответил класс', 'Сынып қалай жауап берді')}>
+              {run.options.map((o, i) => (
+                <li key={i} className={i === run.correct ? 'correct' : ''}>
+                  <span>{o}</span>
+                  <span className="hook-split-bar">
+                    <i style={{ width: `${share(i)}%` }} />
+                  </span>
+                  <b>{share(i)}%</b>
+                </li>
+              ))}
+            </ul>
+          )}
+          {run.recheck_open && run.recheck_options && !run.my_recheck && (
+            <div className="hook-recheck">
+              <b>{t('Проверь себя через 3 дня', '3 күннен кейін өзіңді тексер')}</b>
+              <BetForm
+                name={`recheck-${run.id}`}
+                options={run.recheck_options}
+                withReason={false}
+                submitLabel={t('Проверить себя', 'Өзіңді тексеру')}
+                onSubmit={(v) => bet('recheck', v)}
+              />
+            </div>
+          )}
+          {run.my_recheck && (
+            <p className="hook-count">
+              {run.my_recheck.answer === recheckCorrect
+                ? t('Повтор: запомнил!', 'Қайталау: есіңде!')
+                : t('Повтор: стоит пересмотреть объяснение', 'Қайталау: түсіндірмені қайта қара')}
+            </p>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** Hooks a student still has to see: open bets, reveals and rechecks. */
+export function StudentHooks() {
+  const { t } = useApp();
+  const r = useResource<StudentHookRun[]>('/hook-runs');
+  const [local, setLocal] = useState<Record<string, StudentHookRun>>({});
+  if (!r.data?.length) return null;
+  return (
+    <section className="hook-section">
+      <h2>{t('Загадки к уроку', 'Сабаққа жұмбақтар')}</h2>
+      {r.data.map((run) => (
+        <HookCard
+          key={run.id}
+          run={local[run.id] || run}
+          onChange={(v) => setLocal((m) => ({ ...m, [v.id]: v }))}
+        />
+      ))}
+    </section>
+  );
+}
+
+/** A small nudge above the feed while a bet is still open. */
+export function HookFeedNudge() {
+  const { t, user } = useApp();
+  const r = useResource<StudentHookRun[]>(user?.role === 'student' ? '/hook-runs' : null);
+  const open = r.data?.find((x) => !x.revealed && !x.my_before);
+  if (!open) return null;
+  return (
+    <Link className="hook-nudge" to="/assignments">
+      <Sparkles size={15} />
+      <span>{t('Загадка к уроку — сделай ставку', 'Сабаққа жұмбақ — болжам жаса')}</span>
+    </Link>
+  );
+}

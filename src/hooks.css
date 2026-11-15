@@ -316,3 +316,240 @@
     grid-column: 2 / 3;
   }
 }
+
+/* Student hook card */
+.hook-section {
+  display: grid;
+  gap: 14px;
+  margin: 8px 0 26px;
+}
+.hook-section h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.hook-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(193, 241, 125, 0.25);
+  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(193, 241, 125, 0.07), rgba(255, 255, 255, 0.02) 55%);
+  min-width: 0;
+}
+.hook-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hook-card header small {
+  color: #9aa796;
+  font-size: 12px;
+}
+.hook-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  color: #0b100a;
+  background: var(--mint);
+  font-size: 12px;
+  font-weight: 700;
+}
+.hook-card h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.hook-video {
+  width: 100%;
+  max-height: 60vh;
+  border-radius: 14px;
+  background: #000;
+}
+.hook-bet {
+  display: grid;
+  gap: 14px;
+}
+.hook-bet fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.hook-options {
+  display: grid;
+  gap: 8px;
+}
+.hook-options label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  font-size: 15px;
+}
+.hook-options label.chosen,
+.hook-confidence label.chosen {
+  border-color: var(--mint);
+  background: rgba(193, 241, 125, 0.1);
+}
+.hook-bet input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.hook-options label:focus-within,
+.hook-confidence label:focus-within {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+.hook-letter {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+.hook-options label.chosen .hook-letter {
+  color: #0b100a;
+  background: var(--mint);
+}
+.hook-confidence {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.hook-confidence legend {
+  margin-bottom: 8px;
+  color: #b7c3b3;
+  font-size: 12px;
+}
+.hook-confidence label {
+  position: relative;
+  padding: 10px 6px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.hook-bet .form-label input {
+  margin-top: 8px;
+  width: 100%;
+}
+.hook-count {
+  margin: 0;
+  color: #9aa796;
+  font-size: 13px;
+}
+.hook-accepted {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(193, 241, 125, 0.08);
+}
+.hook-accepted > svg {
+  color: var(--mint);
+}
+.hook-accepted div {
+  display: grid;
+  gap: 4px;
+}
+.hook-accepted small {
+  color: #b7c3b3;
+}
+.hook-accepted .button {
+  grid-column: 1 / -1;
+}
+.hook-revealed {
+  display: grid;
+  gap: 12px;
+}
+.hook-verdict {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+.hook-verdict.win {
+  color: var(--mint);
+}
+.hook-explanation {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--mint);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  line-height: 1.45;
+}
+.hook-split {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.hook-split li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30% 4ch;
+  gap: 10px;
+  align-items: center;
+}
+.hook-split li.correct {
+  font-weight: 700;
+}
+.hook-split-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.hook-split-bar i {
+  display: block;
+  height: 100%;
+  background: #8fb2ff;
+}
+.hook-split li.correct .hook-split-bar i {
+  background: var(--mint);
+}
+.hook-split b {
+  text-align: right;
+}
+.hook-recheck {
+  display: grid;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.hook-nudge {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 74px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  white-space: nowrap;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  padding: 8px 14px;
+  border-radius: 99px;
+  color: #0b100a;
+  background: var(--mint);
+  font-size: 13px;
+  font-weight: 700;
+}
