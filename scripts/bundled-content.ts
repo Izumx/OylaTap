@@ -5,6 +5,12 @@ import type pg from 'pg';
 import { subjectSchema } from '../server/curriculum.js';
 import khanate from '../content/khanate-flow/lesson.json' with { type: 'json' };
 import prince from '../content/little-prince-grok/lesson.json' with { type: 'json' };
+import hook1 from '../content/hooks/physics-bridge/hook.json' with { type: 'json' };
+import hook2 from '../content/hooks/algebra-square/hook.json' with { type: 'json' };
+import hook3 from '../content/hooks/history-khanate/hook.json' with { type: 'json' };
+import hook4 from '../content/hooks/biology-leaf/hook.json' with { type: 'json' };
+import hook5 from '../content/hooks/geography-climate/hook.json' with { type: 'json' };
+import hook6 from '../content/hooks/literature-abai/hook.json' with { type: 'json' };
 
 export const khanateId = 'f9285ed2-b8cf-419e-83e8-c6844a65f74a';
 export const princeId = 'a260b7a9-8f7c-4e8c-bd87-38f8d1ee0d20';
@@ -57,13 +63,111 @@ export const bundledLessons = [
   },
 ];
 
+export const hookSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  subject: subjectSchema,
+  language: z.enum(['ru', 'kk']),
+  grade: z.number().int().min(5).max(11),
+  topic_id: z.string().uuid(),
+  episode: z.object({ title: z.string().min(1), script: z.string().min(1) }),
+  question: z
+    .object({
+      prompt: z.string().min(1),
+      options: z.array(z.string().min(1)).length(3),
+      correct: z.number().int().nonnegative(),
+      explanation: z.string().min(1),
+    })
+    .refine((q) => q.correct < q.options.length, 'Answer outside options'),
+});
+const hookArt: Record<string, [string, string]> = {
+  physics: ['blue', 'route'],
+  algebra: ['sage', 'math'],
+  'kz-history': ['peach', 'history'],
+  biology: ['sage', 'route'],
+  geography: ['blue', 'route'],
+  'kz-literature': ['lilac', 'book'],
+};
+export const bundledHooks = (
+  [
+    ['physics-bridge', hook1, 27],
+    ['algebra-square', hook2, 29],
+    ['history-khanate', hook3, 32],
+    ['biology-leaf', hook4, 28],
+    ['geography-climate', hook5, 29],
+    ['literature-abai', hook6, 33],
+  ] as const
+).map(([slug, raw, duration], i) => ({
+  id: `30000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+  slug,
+  hook: hookSchema.parse(raw),
+  duration,
+  path: `content/hooks/${slug}/${slug}.mp4`,
+}));
+
+async function checkMedia(paths: string[]) {
+  for (const path of paths) {
+    const media = await stat(path);
+    if (!media.isFile() || !media.size) throw new Error(`Missing bundled video: ${path}`);
+  }
+}
+
+/** Upserts the six lesson hooks; ids of seasons, episodes and questions stay stable. */
+async function upsertHooks(c: pg.PoolClient, ownerId: string) {
+  for (const item of bundledHooks) {
+    const h = item.hook;
+    const [color, art] = hookArt[h.subject] || ['sage', 'book'];
+    await c.query(
+      `INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,color,art,status,source_name,source_text,visibility,topic_id,kind,published_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'published','Загадки к уроку OylaTap; требуется проверка учителем',$10,'public',$11,'hook',now())
+      ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,
+        subject=EXCLUDED.subject,language=EXCLUDED.language,grade=EXCLUDED.grade,
+        source_text=EXCLUDED.source_text,status='published',visibility='public',
+        topic_id=EXCLUDED.topic_id,kind='hook',updated_at=now()`,
+      [item.id, ownerId, h.title, h.description, h.subject, h.language, h.grade, color, art, h.episode.script, h.topic_id],
+    );
+    const episode = (
+      await c.query(
+        `INSERT INTO episodes(id,season_id,position,title,script,duration,media_path,media_kind)
+        VALUES($1,$2,0,$3,$4,$5,$6,'uploaded') ON CONFLICT(season_id,position) DO UPDATE
+        SET title=EXCLUDED.title,script=EXCLUDED.script,duration=EXCLUDED.duration,
+          media_path=EXCLUDED.media_path,media_kind='uploaded' RETURNING id`,
+        [randomUUID(), item.id, h.episode.title, h.episode.script, item.duration, item.path],
+      )
+    ).rows[0];
+    const q = h.question;
+    await c.query(
+      `INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id,purpose)
+      VALUES($1,$2,0,$3,$4,$5,$6,$7,'hook') ON CONFLICT(season_id,position) DO UPDATE SET
+        prompt=EXCLUDED.prompt,options=EXCLUDED.options,correct=EXCLUDED.correct,
+        explanation=EXCLUDED.explanation,episode_id=EXCLUDED.episode_id,purpose='hook'`,
+      [randomUUID(), item.id, q.prompt, JSON.stringify(q.options), q.correct, q.explanation, episode.id],
+    );
+  }
+}
+
+/** Syncs only the bundled lesson hooks, in its own transaction. */
+export async function syncBundledHooks(pool: pg.Pool, ownerId: string) {
+  await checkMedia(bundledHooks.map((x) => x.path));
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query('SELECT pg_advisory_xact_lock(4912772)');
+    await upsertHooks(c, ownerId);
+    await c.query('COMMIT');
+    return bundledHooks.map((x) => x.id);
+  } catch (error) {
+    await c.query('ROLLBACK');
+    throw error;
+  } finally {
+    c.release();
+  }
+}
+
 /** Back up existing installations before running. Unrelated authored lessons are preserved. */
 export async function syncBundledContent(pool: pg.Pool, ownerId: string) {
   // Fail before changing the database if either real video is missing or empty.
-  for (const item of bundledLessons) {
-    const media = await stat(item.path);
-    if (!media.isFile() || !media.size) throw new Error(`Missing bundled video: ${item.path}`);
-  }
+  await checkMedia([...bundledLessons, ...bundledHooks].map((x) => x.path));
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
@@ -128,6 +232,7 @@ export async function syncBundledContent(pool: pg.Pool, ownerId: string) {
         );
       }
     }
+    await upsertHooks(c, ownerId);
     const legacy = (
       await c.query(
         `SELECT s.id FROM seasons s
@@ -163,6 +268,7 @@ export async function syncBundledContent(pool: pg.Pool, ownerId: string) {
     await c.query('COMMIT');
     return {
       lessons: bundledLessons.map((x) => x.id),
+      hooks: bundledHooks.map((x) => x.id),
       removedSeasons: legacy,
       removedMedia: removed,
     };

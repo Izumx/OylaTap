@@ -3,6 +3,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { tokenHash } from '../server/auth';
+import { syncBundledHooks, bundledHooks } from '../scripts/bundled-content';
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const users: string[] = [],
   contexts: BrowserContext[] = [],
@@ -412,4 +413,32 @@ test('student bets before the lesson and sees the answer only after reveal', asy
   await expect(card).toContainText('Силы уравновешены.');
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width).toBeLessThanOrEqual(390);
+});
+
+test('bundled hooks appear in the launch picker with their topics', async ({ browser }) => {
+  const t = await actor(browser, 'Владелец загадок', 'teacher');
+  const ids = bundledHooks.map((h) => h.id);
+  const existed = (await db.query('SELECT id FROM seasons WHERE id=ANY($1)', [ids])).rowCount;
+  if (!existed) seasons.push(...ids);
+  await syncBundledHooks(db, t.id);
+  const before = await db.query(
+    "SELECT e.id e, q.id q FROM episodes e JOIN questions q ON q.season_id=e.season_id AND q.purpose='hook' WHERE e.season_id=ANY($1) ORDER BY e.id",
+    [ids],
+  );
+  await syncBundledHooks(db, t.id);
+  const after = await db.query(
+    "SELECT e.id e, q.id q FROM episodes e JOIN questions q ON q.season_id=e.season_id AND q.purpose='hook' WHERE e.season_id=ANY($1) ORDER BY e.id",
+    [ids],
+  );
+  expect(after.rows).toEqual(before.rows);
+  expect(after.rowCount).toBe(6);
+  const hooks = (await get(t, '/hooks')).filter((h: { id: string }) => ids.includes(h.id));
+  expect(hooks).toHaveLength(6);
+  const physics = hooks.find((h: { subject: string }) => h.subject === 'physics');
+  expect(physics.topic_title_ru).toBe('Взаимодействие тел. Сила');
+  expect(physics.title).toBe('Почему мост не падает?');
+  for (const h of hooks) {
+    const r = await t.context.request.get(`/api/episodes/${h.episode_id}/video`);
+    expect(r.status(), h.title).toBe(200);
+  }
 });
