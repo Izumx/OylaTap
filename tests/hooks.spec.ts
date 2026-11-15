@@ -101,3 +101,158 @@ test('published hook seasons stay out of catalog, today plan and recommendations
     expect(body.includes(hook.id), path).toBe(false);
   }
 });
+
+async function post(a: Actor, path: string, data: unknown = {}) {
+  const r = await a.context.request.post('/api' + path, { data });
+  expect(r.ok(), await r.text()).toBe(true);
+  return r.json();
+}
+async function status(a: Actor, method: 'get' | 'post', path: string, data: unknown = {}) {
+  const r =
+    method === 'get'
+      ? await a.context.request.get('/api' + path)
+      : await a.context.request.post('/api' + path, { data });
+  return r.status();
+}
+async function hookClass(browser: Browser, studentNames = ['Айгерим', 'Данияр']) {
+  const t = await actor(browser, 'Учитель', 'teacher');
+  const students = [];
+  for (const n of studentNames) students.push(await actor(browser, n));
+  const c = await post(t, '/classes', { name: '7 А · Физика' });
+  for (const s of students) await post(s, '/classes/join', { code: c.code });
+  const hook = await hookSeason(t.id);
+  const run = await post(t, `/classes/${c.id}/hook-runs`, {
+    season_id: hook.id,
+    lesson_at: '2099-01-01T10:00:00Z',
+  });
+  return { t, students, c, hook, run };
+}
+
+test('teacher launches a hook, students guess, votes stay hidden until the teacher shows them, reveal opens the answer', async ({
+  browser,
+}) => {
+  const { t, students, c, hook, run } = await hookClass(browser);
+  const [s1, s2] = students;
+  expect(
+    await status(t, 'post', `/classes/${c.id}/hook-runs`, {
+      season_id: hook.id,
+      lesson_at: '2099-01-01T10:00:00Z',
+    }),
+  ).toBe(409);
+  await post(s1, `/hook-runs/${run.id}/guess`, {
+    phase: 'before',
+    answer: 1,
+    confidence: 3,
+    reason: 'Силы',
+  });
+  await post(s2, `/hook-runs/${run.id}/guess`, { phase: 'before', answer: 0, confidence: 1 });
+  const mine = await get(s1, `/hook-runs/${run.id}`);
+  expect(mine).not.toHaveProperty('correct');
+  expect(mine).not.toHaveProperty('explanation');
+  expect(mine).not.toHaveProperty('votes');
+  expect(mine.answered).toBe(2);
+  expect(mine.students).toBe(2);
+  expect(mine.my_before.answer).toBe(1);
+  expect(mine.revealed).toBe(false);
+  let screen = await get(t, `/hook-runs/${run.id}/screen`);
+  expect(screen.votes).toBeNull();
+  expect(screen.correct).toBeNull();
+  expect(screen.answered).toBe(2);
+  screen = await post(t, `/hook-runs/${run.id}/show-votes`);
+  expect(screen.votes).toEqual([1, 1, 0]);
+  expect(screen.confident).toBe(1);
+  expect(screen.correct).toBeNull();
+  screen = await post(t, `/hook-runs/${run.id}/reveal`);
+  expect(screen.correct).toBe(1);
+  expect(screen.revealed).toBe(true);
+  const after = await get(s1, `/hook-runs/${run.id}`);
+  expect(after.revealed).toBe(true);
+  expect(after.correct).toBe(1);
+  expect(after.votes).toEqual([1, 1, 0]);
+  expect(
+    await status(s2, 'post', `/hook-runs/${run.id}/guess`, {
+      phase: 'before',
+      answer: 1,
+      confidence: 2,
+    }),
+  ).toBe(409);
+});
+
+test('hook runs are private to the class', async ({ browser }) => {
+  const { run } = await hookClass(browser, ['Айгерим']);
+  const outsider = await actor(browser, 'Чужой ученик');
+  const otherTeacher = await actor(browser, 'Чужой учитель', 'teacher');
+  expect(await status(outsider, 'get', `/hook-runs/${run.id}`)).toBe(404);
+  expect(
+    await status(outsider, 'post', `/hook-runs/${run.id}/guess`, {
+      phase: 'before',
+      answer: 0,
+      confidence: 2,
+    }),
+  ).toBe(404);
+  for (const path of ['screen', 'results'])
+    expect(await status(otherTeacher, 'get', `/hook-runs/${run.id}/${path}`)).toBe(404);
+  for (const path of ['reveal', 'show-votes', 'restart'])
+    expect(await status(otherTeacher, 'post', `/hook-runs/${run.id}/${path}`)).toBe(404);
+  expect((await get(outsider, '/hook-runs')).length).toBe(0);
+});
+
+test('recheck maps shuffled options back and opens three days after reveal', async ({
+  browser,
+}) => {
+  const { t, students, run } = await hookClass(browser, ['Айгерим']);
+  const [s] = students;
+  await post(s, `/hook-runs/${run.id}/guess`, { phase: 'before', answer: 0, confidence: 2 });
+  await post(t, `/hook-runs/${run.id}/reveal`);
+  const due = await db.query('SELECT recheck_at - revealed_at AS gap FROM hook_runs WHERE id=$1', [
+    run.id,
+  ]);
+  expect(due.rows[0].gap.days).toBe(3);
+  expect(
+    await status(s, 'post', `/hook-runs/${run.id}/guess`, {
+      phase: 'recheck',
+      answer: 0,
+      confidence: 2,
+    }),
+  ).toBe(409);
+  await db.query("UPDATE hook_runs SET recheck_at=now()-interval '1 minute' WHERE id=$1", [run.id]);
+  const open = await get(s, `/hook-runs/${run.id}`);
+  expect(open.recheck_open).toBe(true);
+  expect(open.recheck_options).not.toEqual(open.options);
+  expect([...open.recheck_options].sort()).toEqual([...open.options].sort());
+  const pick = open.recheck_options.indexOf(open.options[open.correct]);
+  await post(s, `/hook-runs/${run.id}/guess`, { phase: 'recheck', answer: pick, confidence: 3 });
+  const results = await get(t, `/hook-runs/${run.id}/results`);
+  expect(results.students[0].recheck_answer).toBe(1);
+  expect(results.summary.recheck_correct).toBe(1);
+  expect(results.summary.before_correct).toBe(0);
+});
+
+test('restart clears guesses and reveal', async ({ browser }) => {
+  const { t, students, run } = await hookClass(browser, ['Айгерим']);
+  const [s] = students;
+  await post(s, `/hook-runs/${run.id}/guess`, { phase: 'before', answer: 2, confidence: 1 });
+  await post(t, `/hook-runs/${run.id}/reveal`);
+  const screen = await post(t, `/hook-runs/${run.id}/restart`);
+  expect(screen.answered).toBe(0);
+  expect(screen.revealed).toBe(false);
+  expect(screen.votes).toBeNull();
+  await post(s, `/hook-runs/${run.id}/guess`, { phase: 'before', answer: 1, confidence: 3 });
+});
+
+test('empty class screen shows zeros', async ({ browser }) => {
+  const { t, run } = await hookClass(browser, []);
+  const screen = await get(t, `/hook-runs/${run.id}/screen`);
+  expect(screen.answered).toBe(0);
+  expect(screen.students).toBe(0);
+  const results = await get(t, `/hook-runs/${run.id}/results`);
+  expect(results.summary).toEqual({
+    students: 0,
+    watched: 0,
+    answered: 0,
+    before_correct: 0,
+    recheck_answered: 0,
+    recheck_correct: 0,
+  });
+  expect(results.students).toEqual([]);
+});

@@ -23,6 +23,7 @@ import {
 } from './auth.js';
 import { dataDir, renderSeason, ttsAvailable } from './render.js';
 import { dailyRouter } from './daily.js';
+import { hooksRouter } from './hooks.js';
 import { assessmentsRouter } from './assessments.js';
 import { reportsRouter } from './reports.js';
 import { aiEnabled, generateDraft, materialSchema } from './ai.js';
@@ -110,6 +111,7 @@ const publicUser = (u: any) => ({
   is_moderator: u.is_moderator,
 });
 app.use('/api', dailyRouter(visibilitySql));
+app.use('/api', hooksRouter(visibilitySql));
 app.use('/api', assessmentsRouter(visibilitySql));
 app.use('/api', curriculumRouter());
 app.use('/api', moderationRouter(visibilitySql));
