@@ -48,7 +48,7 @@ async function selectPlan(
        EXISTS(SELECT 1 FROM episodes e WHERE e.season_id=s.id AND e.media_path IS NOT NULL
          AND NOT (EXISTS(SELECT 1 FROM completions c WHERE c.user_id=$1 AND c.episode_id=e.id)
            AND EXISTS(SELECT 1 FROM micro_answers ma WHERE ma.user_id=$1 AND ma.episode_id=e.id AND ma.passed))) route_pending
-       FROM seasons s WHERE s.status='published' AND ${visibilitySql}
+       FROM seasons s WHERE s.status='published' AND s.kind='lesson' AND ${visibilitySql}
        AND EXISTS(SELECT 1 FROM episodes e WHERE e.season_id=s.id AND e.media_path IS NOT NULL)
        ORDER BY s.created_at,s.id`,
       [userId],

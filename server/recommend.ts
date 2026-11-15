@@ -42,7 +42,7 @@ export function recommendRouter(visibilitySql: string) {
       `SELECT s.id,s.title,s.subject,s.language,s.grade,s.owner_id,s.published_at,
        t.title_ru topic_title_ru,t.title_kk topic_title_kk,t.grade topic_grade,t.week_from,t.week_to
        FROM seasons s LEFT JOIN curriculum_topics t ON t.id=s.topic_id
-       WHERE s.status='published' AND ${visibilitySql}
+       WHERE s.status='published' AND s.kind='lesson' AND ${visibilitySql}
        AND EXISTS(SELECT 1 FROM episodes e WHERE e.season_id=s.id AND e.media_path IS NOT NULL)
        ORDER BY s.published_at DESC NULLS LAST LIMIT 300`,
       [userId],

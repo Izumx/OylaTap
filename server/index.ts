@@ -227,7 +227,7 @@ app.get('/api/catalog', async (req, res) =>
   res.json(
     await rows(
       catalogSql +
-        " WHERE s.status='published' AND " +
+        " WHERE s.status='published' AND s.kind='lesson' AND " +
         visibilitySql +
         ' ORDER BY s.created_at,s.id',
       [req.user?.id || null],
@@ -250,7 +250,7 @@ app.get('/api/authors/:id', async (req, res) => {
   if (!profile) notFound();
   const seasons = await rows(
     catalogSql +
-      " WHERE s.owner_id=$2 AND s.status='published' AND " +
+      " WHERE s.owner_id=$2 AND s.status='published' AND s.kind='lesson' AND " +
       visibilitySql +
       ' ORDER BY s.published_at DESC NULLS LAST,s.id',
     [req.user?.id || null, id],
@@ -418,7 +418,7 @@ app.get('/api/progress', required, async (req, res) => {
     activity,
     seasons: await rows(
       catalogSql +
-        " WHERE s.status='published' AND (EXISTS(SELECT 1 FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) OR EXISTS(SELECT 1 FROM attempts a WHERE a.season_id=s.id AND a.user_id=$1)) ORDER BY s.id",
+        " WHERE s.status='published' AND s.kind='lesson' AND (EXISTS(SELECT 1 FROM completions c JOIN episodes e ON e.id=c.episode_id WHERE e.season_id=s.id AND c.user_id=$1) OR EXISTS(SELECT 1 FROM attempts a WHERE a.season_id=s.id AND a.user_id=$1)) ORDER BY s.id",
       [id],
     ),
   });

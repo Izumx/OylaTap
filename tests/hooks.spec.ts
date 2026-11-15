@@ -68,3 +68,36 @@ test('migration adds hook tables, guest columns and new subjects', async ({ brow
     physics.topics.some((t: { title_ru: string }) => t.title_ru === 'Взаимодействие тел. Сила'),
   ).toBe(true);
 });
+
+async function hookSeason(ownerId: string, title = 'Почему мост не падает?') {
+  const id = randomUUID(),
+    episode = randomUUID();
+  await db.query(
+    `INSERT INTO seasons(id,owner_id,title,description,subject,language,grade,status,visibility,kind,topic_id,published_at)
+     VALUES($1,$2,$3,'Загадка к уроку','physics','ru',7,'published','public','hook','40000000-0000-4000-8000-000000000901',now())`,
+    [id, ownerId, title],
+  );
+  seasons.push(id);
+  await db.query(
+    "INSERT INTO episodes(id,season_id,position,title,script,duration,media_path,media_kind) VALUES($1,$2,0,$3,'Сценарий',27,'content/khanate-flow/oylatap-khanate-full-ru.mp4','uploaded')",
+    [episode, id, title],
+  );
+  await db.query(
+    `INSERT INTO questions(id,season_id,position,prompt,options,correct,explanation,episode_id,purpose)
+     VALUES($1,$2,0,'Что не даёт мосту упасть?',$3,1,'Силы уравновешены.',$4,'hook')`,
+    [randomUUID(), id, JSON.stringify(['Он тяжёлый', 'Силы уравновешены', 'Ветер']), episode],
+  );
+  return { id, episode };
+}
+
+test('published hook seasons stay out of catalog, today plan and recommendations', async ({
+  browser,
+}) => {
+  const t = await actor(browser, 'Учитель', 'teacher');
+  const s = await actor(browser, 'Ученик');
+  const hook = await hookSeason(t.id);
+  for (const path of ['/catalog', '/today', '/foryou']) {
+    const body = JSON.stringify(await get(s, path));
+    expect(body.includes(hook.id), path).toBe(false);
+  }
+});
